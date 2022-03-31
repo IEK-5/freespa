@@ -1,10 +1,21 @@
 
+/* 
+ * Periodic Terms Tables
+ */
 
+// small helper struct
 typedef struct p_term {
 	double A; // amplitude
 	double P; // phase
 	double W; // frequency (rad/s)
 } p_term;
+
+/* Periodic Terms for Earth
+ * Taken from:
+ * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
+ * Inc., Richmond, Virginia, USA.
+ * Pages 418-421
+ */
 
 #define N_LON0 64
 const p_term EarthLon0[N_LON0]={
@@ -249,6 +260,13 @@ const p_term EarthRad4[N_RAD4]={
 };
 
 
+/* Periodic terms for the nutation in longitude and obliquity
+ * 
+ * see 
+ * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
+ * Inc., Richmond, Virginia, USA.
+ * Pages 145-146
+ */
 #define NY 63
 const int Y_Terms[NY][5]=
 {

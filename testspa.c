@@ -6,7 +6,6 @@
 #include "freespa.h"
 #include "spa.h"
 
-//#define _DEBUG_
 void TIC(double *r)
 {
 	(*r)=(double)clock();
@@ -16,19 +15,31 @@ double TOC(double *r)
 	return ((double)clock()-(*r))/CLOCKS_PER_SEC;
 }
 
-
-double AngleBetween(sky_pos p1, sky_pos p2)
+double AngleBetween(double z1, double a1, double z2, double a2)
 {
-	double p=fmod(p1.a-p2.a,2*M_PI);
+	double p=fmod(a1-a2,2*M_PI);
 	double f;
-	f=cos(p1.z)*cos(p2.z)+sin(p1.z)*sin(p2.z)*cos(p);
+	f=cos(z1)*cos(z2)+sin(z1)*sin(z2)*cos(p);
 	return acos(f);
 }
 
+#define ABSOLUTEZERO -273.0 //convert C to K (aparently everyone ignores the .15)
+#define AP0 1010.0 // standard sea level air pressure
+#define AT0 10.0 // standard sea level air temperature
+double Refr(const double coeff[], double p, double T, double h)
+{
+	//converts true and aparent solar elevation
+	return (p/AP0)*((AT0-ABSOLUTEZERO)/(T-ABSOLUTEZERO))*coeff[0]/tan(h+coeff[1]/(h+coeff[2]));
+}
 
-
+double Bennet(double p, double T, double h)
+{
+	const double BENNET[] = {2.9088820866572158e-04,2.2267533386408395e-03,7.6794487087750510e-02};
+	return Refr(BENNET, p, T, h);
+}
+// simple wrapper around NREL's spa code
 sol_pos SPA_Wrapper(time_t t, double delta_t, double delta_ut1, double lon, 
-            double lat, double e, double p, double a_refr, double T)
+            double lat, double e, double p, double T)
 {
 	spa_data spa;	
 	struct tm *ut;
@@ -58,35 +69,15 @@ sol_pos SPA_Wrapper(time_t t, double delta_t, double delta_ut1, double lon,
 	spa.temperature=T;
 	spa.slope=0;
 	spa.azm_rotation=0;
-	spa.atmos_refract=180.0*a_refr/M_PI;
+	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
 	spa.function=SPA_ZA;
 	spa_calculate(&spa);
-#ifdef _DEBUG_
-	#define PPAR(name,par) (printf("%s:\t%.12e\n",name,deg2rad(par)))
-	PPAR("x[0]",spa.x0);
-	PPAR("x[1]",spa.x1);
-	PPAR("x[2]",spa.x2);
-	PPAR("x[3]",spa.x3);
-	PPAR("x[4]",spa.x4);
-	printf("JD.JCE:\t%.12e\n",spa.jce);
-	PPAR("dtau",spa.del_tau);
-	PPAR("dpsi",spa.del_psi);
-	PPAR("deps",spa.del_epsilon);
-	PPAR("eps",spa.epsilon);
-	PPAR("v",spa.nu);
-	PPAR("alpha",spa.alpha);
-	PPAR("delta",spa.delta);
-	PPAR("H",spa.h);
-	PPAR("delta_prime",spa.delta_prime);
-	PPAR("H_prime",spa.h_prime);
-	PPAR("ele",spa.e0);
-	PPAR("dele",spa.del_e);
-#endif		
 	
-	P.sa.z=fmod(M_PI*spa.zenith/180,2*M_PI);
-	P.sa.a=fmod(M_PI*spa.azimuth/180, 2*M_PI);
-	P.s=P.sa;
-	P.s.z+=M_PI*spa.del_e/180;
+	P.az=fmod(M_PI*spa.zenith/180,2*M_PI);
+	P.aa=fmod(M_PI*spa.azimuth/180, 2*M_PI);
+	P.a=P.aa;
+	P.z=P.az;
+	P.z+=M_PI*spa.del_e/180;
 	return P;
 }
 
@@ -114,7 +105,7 @@ double RandLat()
 {
 	return M_PI*((double)rand()/(double)(RAND_MAX))-M_PI/2;
 } 
-// spa is accurate to 0.0003 degrees, i.e. about 5e-6 radians
+// spa is allegibly accurate to 0.0003 degrees, i.e. about 5e-6 radians
 // small numerical differences from constant conversions are OK
 #define RAD_EPS 2e-7
 int SpecificTester(time_t tc, double lat, double lon, int verb)
@@ -123,9 +114,9 @@ int SpecificTester(time_t tc, double lat, double lon, int verb)
 	double d;
 	char* timestr;
 	struct tm *ut;
-	P1=SPA_NREL(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, M_PI*0.5667/180, 20);
-	P2=SPA_Wrapper(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, M_PI*0.5667/180, 20);
-	d=AngleBetween(P1.sa, P2.sa); // note that simply comparing azimuth and zenith has a problem for small zenith angles
+	P1=        SPA(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
+	P2=SPA_Wrapper(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
+	d=AngleBetween(P1.az, P1.aa, P2.az, P2.aa); // note that simply comparing azimuth and zenith has a problem for small zenith angles
 								  // (azimuth has no effect for zenith=0) thus we compute the angle between the two 
 								  // solar vectors
 	if ((fabs(d)>RAD_EPS)||verb)
@@ -134,8 +125,10 @@ int SpecificTester(time_t tc, double lat, double lon, int verb)
 		ut=gmtime(&tc);	
 		strftime(timestr, 50, "%Y/%m/%d %T %Z",ut);
 		printf("%s: %ld %.12e %.12e %.12e\n", timestr, tc, lat, lon,d);
-		printf("zenith:  %e\t%e\t%e\n", P1.sa.z, P2.sa.z, P1.sa.z-P2.sa.z);
-		printf("azimuth: %e\t%e\t%e\n\n", P1.sa.a, P2.sa.a, P1.sa.a-P2.sa.a);
+		printf("a zenith:  %e\t%e\t%e\n", P1.az, P2.az, P1.az-P2.az);
+		printf("a azimuth: %e\t%e\t%e\n", P1.aa, P2.aa, P1.aa-P2.aa);
+		printf("t zenith:  %e\t%e\t%e\n", P1.z, P2.z, P1.z-P2.z);
+		printf("t azimuth: %e\t%e\t%e\n\n", P1.a, P2.a, P1.a-P2.a);
 		free(timestr);
 			return 1;
 	}
@@ -153,10 +146,10 @@ int RandomTester()
 }
 #define LAT 50.902996388
 #define LON 6.407165038
-#define N 100000000
+#define N 10
 #define NN 100000
 // benchmark routine speed
-double Perf(int Nc, sol_pos (*sparoutine)(time_t, double, double, double, double , double, double, double , double))
+double Perf(int Nc, sol_pos (*sparoutine)(time_t, double, double, double, double, double, double , double))
 {
 	int i;
 	double t;
@@ -170,8 +163,8 @@ double Perf(int Nc, sol_pos (*sparoutine)(time_t, double, double, double, double
 	for (i=0;i<Nc;i++)
 	{
 		//lat=RandLat();// only one random parameter in loop, saves time
-		P=sparoutine(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, M_PI*0.5667/180, 20);
-		s+=P.sa.z; // do not optimize this loop out
+		P=sparoutine(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
+		s+=P.az; // do not optimize this loop out
 	}
 	printf("bogus number %e\n",s);
 	return TOC(&t);
@@ -216,7 +209,7 @@ int main()
 	t=TOC(&t);
 	printf("used %f s (%.1f us/test)\n", t, 1e6*t/N);
 	//exit(0);
-	t=Perf(NN, &SPA_NREL);
+	t=Perf(NN, &SPA);
 	printf("used %f s (%.1f us/call)\n", NN, t, 1e6*t/NN);
 	t=Perf(NN, &SPA_Wrapper);
 	printf("used %f s (%.1f us/call)\n", NN, t, 1e6*t/NN);
