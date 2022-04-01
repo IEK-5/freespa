@@ -38,19 +38,13 @@ double Bennet(double p, double T, double h)
 	return Refr(BENNET, p, T, h);
 }
 // simple wrapper around NREL's spa code
-sol_pos SPA_Wrapper(time_t t, double delta_t, double delta_ut1, double lon, 
+sol_pos SPA_Wrapper(struct tm *ut, double delta_t, double delta_ut1, double lon, 
             double lat, double e, double p, double T)
 {
-	spa_data spa;	
-	struct tm *ut;
+	spa_data spa;
 	sol_pos P;
 	
 	
-	ut=gmtime(&t);	
-	if (!ut)
-	{
-		P.E=1;
-	}
 	P.E=0;
 	
 	spa.year=ut->tm_year+1900;
@@ -114,15 +108,17 @@ int SpecificTester(time_t tc, double lat, double lon, int verb)
 	double d;
 	char* timestr;
 	struct tm *ut;
-	P1=        SPA(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
-	P2=SPA_Wrapper(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
+	ut=gmtime(&tc);
+		
+	P1=        SPA(ut, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
+	P2=SPA_Wrapper(ut, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
 	d=AngleBetween(P1.az, P1.aa, P2.az, P2.aa); // note that simply comparing azimuth and zenith has a problem for small zenith angles
 								  // (azimuth has no effect for zenith=0) thus we compute the angle between the two 
 								  // solar vectors
+	
 	if ((fabs(d)>RAD_EPS)||verb)
 	{
 		timestr=malloc(50*sizeof(char));
-		ut=gmtime(&tc);	
 		strftime(timestr, 50, "%Y/%m/%d %T %Z",ut);
 		printf("%s: %ld %.12e %.12e %.12e\n", timestr, tc, lat, lon,d);
 		printf("a zenith:  %e\t%e\t%e\n", P1.az, P2.az, P1.az-P2.az);
@@ -147,23 +143,25 @@ int RandomTester()
 #define LAT 50.902996388
 #define LON 6.407165038
 #define N 10
-#define NN 100000
+#define NN 1
 // benchmark routine speed
-double Perf(int Nc, sol_pos (*sparoutine)(time_t, double, double, double, double, double, double , double))
+double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double, double, double, double, double, double , double))
 {
 	int i;
 	double t;
 	time_t tc;
 	double lat, lon, s=0;
 	sol_pos P;
+	struct tm *ut;
 	TIC(&t);
 	lon=RandLon();
 	lat=RandLat();// only one random parameter in loop, saves time
 	tc=RandEpoch();
+	ut=gmtime(&tc);
 	for (i=0;i<Nc;i++)
 	{
 		//lat=RandLat();// only one random parameter in loop, saves time
-		P=sparoutine(tc, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
+		P=sparoutine(ut, 0, 0, M_PI*lon/180,  M_PI*lat/180, 0, 1010, 10);
 		s+=P.az; // do not optimize this loop out
 	}
 	printf("bogus number %e\n",s);

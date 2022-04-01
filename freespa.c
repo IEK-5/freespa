@@ -1,16 +1,22 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
 #include <math.h>
 #include "freespa.h"
 #include "freespa_tables.h"
 
-/* Implementation of the solar position algorithm described in:
+/* Implementation of the solar position algorithm
+ * A document decribing the algorithm can be found on NREL's website:
+ * https://midcdmz.nrel.gov/spa/
+ * Also another implementation of the same algorithm can be found there.
+ * Note, however, NREL's implementation is free as in beer, but NREL 
+ * does not allow you to share the beer with your friends. 
+ * 
+ * This implementation lets you share the beer with your friends (under 
+ * the conditions of the GPLv3)!
+ * 
+ * Most of the algorithm is described in more detail in:
  * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
  * Inc., Richmond, Virginia, USA.
- * 
- * 
- * 
  */
 
 /* defines */
@@ -54,32 +60,16 @@ typedef struct GeoCentricSolPos {
  * Inc., Richmond, Virginia, USA.
  * Pages 59-66
  */
-
-JulianDay MakeJulianDay(time_t t, double delta_t, double delta_ut1)
+JulianDay MakeJulianDay(struct tm *ut, double delta_t, double delta_ut1)
 {
-	struct tm ut;
-	struct tm *p;
 	int month, year;
 	double day, a;
 	JulianDay JD;
-	
-	p=gmtime_r(&t, &ut);
-	
-	if (!p)
-	{
-		JD.JD=0.0;
-		JD.JDE=0.0;
-		JD.JC=0.0;
-		JD.JCE=0.0;
-		JD.JME=0.0;
-		JD.E=GMTIMEFAIL;
-		return JD;
-	}
-	
+		
 	JD.E=0;
-	day = (double)ut.tm_mday + ((double)ut.tm_hour+((double)ut.tm_min+((double)ut.tm_sec+delta_ut1)/60.0)/60.0)/24;
-	month=ut.tm_mon+1;
-	year=ut.tm_year+1900;
+	day = (double)ut->tm_mday + ((double)ut->tm_hour+((double)ut->tm_min+((double)ut->tm_sec+delta_ut1)/60.0)/60.0)/24;
+	month=ut->tm_mon+1;
+	year=ut->tm_year+1900;
     if (month < 3)
     {
         month += 12;
@@ -100,8 +90,29 @@ JulianDay MakeJulianDay(time_t t, double delta_t, double delta_ut1)
 	return JD;
 }
 
+JulianDay MakeJulianDayEpoch(time_t t, double delta_t, double delta_ut1)
+{
+	struct tm ut;
+	struct tm *p;
+	JulianDay JD;
+	
+	p=gmtime_r(&t, &ut);
+	
+	if (!p)
+	{
+		JD.JD=0.0;
+		JD.JDE=0.0;
+		JD.JC=0.0;
+		JD.JCE=0.0;
+		JD.JME=0.0;
+		JD.E=GMTIMEFAIL;
+	}
+	else
+		JD=MakeJulianDay(&ut, delta_t, delta_ut1);
+	return JD;
+}
+
 /* Heliocentric Earth Coordinate ***************************/
-// function to sum periodic terms.
 // corresponding tables with periodic terms are in freespa_tables.h
 double SummPTerms(const p_term p[], int N, JulianDay JD)
 {
@@ -296,7 +307,7 @@ sol_pos solpos(sol_pos P, double lon, double lat, double e, double p, double T, 
 	double dpsi, deps, eps, dalpha;
 	double h, dh=0, a_refr;
 	
-	// aberration correction
+	// aberation correction
 	dtau=deg2rad(-20.4898/3600.0)/GP.rad;
 	
 	// nutation and the obliquity of the ecliptic
@@ -437,7 +448,7 @@ int InputCheck(double delta_t, double delta_ut1, double lon,
  * output:
  *  - sol_pos struct with the real and aparent solar position
  */
-sol_pos SPA(time_t t, double delta_t, double delta_ut1, double lon, 
+sol_pos SPA(struct tm *ut, double delta_t, double delta_ut1, double lon, 
             double lat, double e, double p, double T)
 {
 	JulianDay D;
@@ -446,7 +457,7 @@ sol_pos SPA(time_t t, double delta_t, double delta_ut1, double lon,
 	P.E=InputCheck(delta_t, delta_ut1, lon, lat, e, p, T);
 	if (!P.E)
 	{
-		D=MakeJulianDay(t, delta_t, delta_ut1);
+		D=MakeJulianDay(ut, delta_t, delta_ut1);
 		if (D.E)
 		{
 			P.E=D.E;
@@ -476,7 +487,7 @@ int testjulian()
 		ut=gmtime(&dates[i]);	
 		strftime(timestr, 50, "%Y-%m-%d %T %Z",ut);
 		printf("testing %s", timestr);
-		D=MakeJulianDay(dates[i], 0,0);
+		D=MakeJulianDayEpoch(dates[i], 0,0);
 		printf("--> JD:%.1f\n", D.JD);
 		
 		if (fabs(D.JD-JDs[i])>JDEPS)
@@ -504,7 +515,7 @@ int testheliocentricpos()
 	double delta_ut1=0;
 	double Hlon,Hlat, HR;
 	JulianDay D;
-	D=MakeJulianDay(date, delta_t, delta_ut1);
+	D=MakeJulianDayEpoch(date, delta_t, delta_ut1);
 
 	if (fabs(D.JD-JD)>JDEPS)
 	{
