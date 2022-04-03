@@ -127,7 +127,7 @@ int TestSPA(char *fn)
 			if (p)
 			{
 				j++;
-				P=SPA(p, 0, 0, lon,  lat, 0, 1010, 10);		
+				P=SPA(p, NULL, 0, lon,  lat, 0, 1010, 10);		
 				d=AngleBetween(P.az, P.aa, Pr.az, Pr.aa);
 				if (fabs(d)>RAD_EPS)
 				{
@@ -170,6 +170,8 @@ int main(int argc, char **argv)
 	int r=0;
 	char *curtz = getenv("TZ"); // Make a copy of the timezone variable
 	char *old=NULL;
+	time_t tc;
+	struct tm ut={0};
 	
 	if (argc!=3)
 	{
@@ -187,6 +189,16 @@ int main(int argc, char **argv)
 		old=strdup(curtz);
     setenv("TZ", ":/usr/share/zoneinfo/Etc/UTC", 1); // always use UTC
     tzset();
+    ut.tm_year=2000;
+    ut.tm_mon=0;
+    ut.tm_mday=1;
+    ut.tm_hour=0;
+    ut.tm_min=0;
+    ut.tm_sec=0;
+    
+    printf("delta t %e\n",get_delta_t(&ut));
+	
+	
 	if (argv[1][0]=='r')
 	{
 		printf("Creating Reference File %s with %d data\n", argv[2], N);

@@ -1,4 +1,3 @@
-
 /* 
  * Periodic Terms Tables
  */

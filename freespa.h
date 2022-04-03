@@ -10,8 +10,9 @@ typedef struct sol_pos {
 	//time_t sunrize, sunset, noon;
 } sol_pos;
 
+double get_delta_t(struct tm *ut);
 // note the time struct must be UTC time, not local!
-sol_pos SPA(struct tm *ut, double delta_t, double delta_ut1, double lon, 
+sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
             double lat, double e, double p, double T);            
             
 int testjulian();

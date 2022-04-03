@@ -3,6 +3,7 @@
 #include <math.h>
 #include "freespa.h"
 #include "freespa_tables.h"
+#include "freespa_dt_table.h"
 
 /* Implementation of the solar position algorithm
  * A document decribing the algorithm can be found on NREL's website:
@@ -23,8 +24,8 @@
 #define JD0 2451545.0 // Julian day noon 1 January 2000 Universal Time
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
 
-#define EARTH_R 6378140.0 //m at the equator
-#define ABSOLUTEZERO -273.0 //convert C to K (aparently everyone ignores the .15)
+#define EARTH_R 6378136.6 //m at the equator [IERS Numerical Standards (IAG 1999)] 
+#define ABSOLUTEZERO -273.15 //convert C to K
 #define AP0 1010.0 // standard sea level air pressure
 #define AT0 10.0 // standard sea level air temperature
 
@@ -60,12 +61,39 @@ typedef struct GeoCentricSolPos {
  * Inc., Richmond, Virginia, USA.
  * Pages 59-66
  */
-JulianDay MakeJulianDay(struct tm *ut, double delta_t, double delta_ut1)
+/* extrapolate delta t  (Morrison & Stephenson, 2004) */
+#define DELATTEXTRAP(y) (32.0*(((y)-1820.0)/100)*(((y)-1820.0)/100)-20)
+/* interpolate delta t */
+double get_delta_t(struct tm *ut)
+{
+	double dyear;
+	int imin=0, imax=NDT-1, i;
+	
+	dyear=(double)ut->tm_year+1900.0+((double)ut->tm_mon+1.0)/12+(double)(ut->tm_mday-1.0)/365.0;
+	if (freespa_delta_t_table[0]>dyear)
+		return DELATTEXTRAP(dyear);
+	if (freespa_delta_t_table[2*imax]<dyear)
+		return DELATTEXTRAP(dyear);
+	
+	while (imax-imin>1)
+	{
+		i=(imin+imax)/2;
+		if (freespa_delta_t_table[2*i]>dyear)
+			imax=i;
+		else if (freespa_delta_t_table[2*i]<dyear)
+			imin=i;
+		else
+			return freespa_delta_t_table[2*i+1];
+	}
+	return freespa_delta_t_table[2*imin+1]+(dyear-freespa_delta_t_table[2*imin])*(freespa_delta_t_table[2*imax+1]-freespa_delta_t_table[2*imin+1])/(freespa_delta_t_table[2*imax]-freespa_delta_t_table[2*imin]);
+}
+ 
+JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 {
 	int month, year;
-	double day, a;
+	double day, a, dt;
 	JulianDay JD;
-		
+	
 	JD.E=0;
 	day = (double)ut->tm_mday + ((double)ut->tm_hour+((double)ut->tm_min+((double)ut->tm_sec+delta_ut1)/60.0)/60.0)/24;
 	month=ut->tm_mon+1;
@@ -81,16 +109,19 @@ JulianDay MakeJulianDay(struct tm *ut, double delta_t, double delta_ut1)
         a = trunc((double)year/100.0);
         JD.JD += (2 - a + trunc(a/4));
     }
-	
+	if (delta_t)
+		dt=*delta_t;
+	else
+		dt=get_delta_t(ut);
 	// Julian Ephemeris Day
-	JD.JDE=JD.JD+delta_t/86400.0;
+	JD.JDE=JD.JD+dt/86400.0;
 	JD.JC=(JD.JD-JD0)/36525.0;
 	JD.JCE=(JD.JDE-JD0)/36525.0;
 	JD.JME=JD.JCE/10.0;
 	return JD;
 }
 
-JulianDay MakeJulianDayEpoch(time_t t, double delta_t, double delta_ut1)
+JulianDay MakeJulianDayEpoch(time_t t, double *delta_t, double delta_ut1)
 {
 	struct tm ut;
 	struct tm *p;
@@ -395,15 +426,10 @@ sol_pos solpos(sol_pos P, double lon, double lat, double e, double p, double T, 
 }
 
 /* check input values */
-int InputCheck(double delta_t, double delta_ut1, double lon, 
+int InputCheck(double delta_ut1, double lon, 
             double lat, double e, double p, double T)
 {
 	int E=0;
-	
-	if (delta_t<-8000)
-		E|=DELTA_T_OOR;
-	else if (delta_t>8000)
-		E|=DELTA_T_OOR;
 	
 	if (delta_ut1<-1)
 		E|=DELTA_UT1_OOR;
@@ -448,13 +474,13 @@ int InputCheck(double delta_t, double delta_ut1, double lon,
  * output:
  *  - sol_pos struct with the real and aparent solar position
  */
-sol_pos SPA(struct tm *ut, double delta_t, double delta_ut1, double lon, 
+sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
             double lat, double e, double p, double T)
 {
 	JulianDay D;
 	GeoCentricSolPos G;
 	sol_pos P;
-	P.E=InputCheck(delta_t, delta_ut1, lon, lat, e, p, T);
+	P.E=InputCheck(delta_ut1, lon, lat, e, p, T);
 	if (!P.E)
 	{
 		D=MakeJulianDay(ut, delta_t, delta_ut1);
@@ -515,7 +541,7 @@ int testheliocentricpos()
 	double delta_ut1=0;
 	double Hlon,Hlat, HR;
 	JulianDay D;
-	D=MakeJulianDayEpoch(date, delta_t, delta_ut1);
+	D=MakeJulianDayEpoch(date, &delta_t, delta_ut1);
 
 	if (fabs(D.JD-JD)>JDEPS)
 	{

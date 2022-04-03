@@ -1,6 +1,6 @@
 SRC=freespa.c testspa.c
 OBJ=freespa.o
-HDR=freespa.h freespa_tables.h
+HDR=freespa.h freespa_tables.h freespa_dt_table.h
 CC=gcc
 CFLAGS=-O3 -flto
 LFLAGS=-lm

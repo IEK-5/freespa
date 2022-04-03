@@ -38,7 +38,7 @@ double Bennet(double p, double T, double h)
 	return Refr(BENNET, p, T, h);
 }
 // simple wrapper around NREL's spa code
-sol_pos SPA_Wrapper(struct tm *ut, double delta_t, double delta_ut1, double lon, 
+sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
             double lat, double e, double p, double T)
 {
 	spa_data spa;
@@ -53,7 +53,7 @@ sol_pos SPA_Wrapper(struct tm *ut, double delta_t, double delta_ut1, double lon,
 	spa.hour=ut->tm_hour;
 	spa.minute=ut->tm_min;
 	spa.second=(double)ut->tm_sec;
-	spa.delta_t=delta_t;
+	spa.delta_t=*delta_t;
 	spa.delta_ut1=delta_ut1;
 	spa.timezone=0;
 	spa.longitude=180.0*lon/M_PI;
@@ -66,7 +66,6 @@ sol_pos SPA_Wrapper(struct tm *ut, double delta_t, double delta_ut1, double lon,
 	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
 	spa.function=SPA_ZA;
 	spa_calculate(&spa);
-	
 	P.az=fmod(M_PI*spa.zenith/180,2*M_PI);
 	P.aa=fmod(M_PI*spa.azimuth/180, 2*M_PI);
 	P.a=P.aa;
@@ -105,13 +104,15 @@ double RandLat()
 int SpecificTester(time_t tc, double lat, double lon, int verb)
 {
 	sol_pos P1, P2;
-	double d;
+	double d, dt;
 	char* timestr;
 	struct tm *ut;
 	ut=gmtime(&tc);
-		
-	P1=        SPA(ut, 0, 0, lon,  lat, 0, 1010, 10);
-	P2=SPA_Wrapper(ut, 0, 0, lon,  lat, 0, 1010, 10);
+	dt=get_delta_t(ut);
+	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
+		dt=0;
+	P1=        SPA(ut, &dt, 0, lon,  lat, 0, 1010, 10);
+	P2=SPA_Wrapper(ut, &dt , 0, lon,  lat, 0, 1010, 10);
 	d=AngleBetween(P1.az, P1.aa, P2.az, P2.aa); // note that simply comparing azimuth and zenith has a problem for small zenith angles
 								  // (azimuth has no effect for zenith=0) thus we compute the angle between the two 
 								  // solar vectors
@@ -145,10 +146,10 @@ int RandomTester()
 #define N 1000
 #define NN 10000
 // benchmark routine speed
-double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double, double, double, double, double, double , double))
+double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double *, double, double, double, double, double , double))
 {
 	int i;
-	double t;
+	double t, dt;
 	time_t tc;
 	double lat, lon, s=0;
 	sol_pos P;
@@ -158,9 +159,10 @@ double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double, double, double, d
 	lat=RandLat();// only one random parameter in loop, saves time
 	tc=RandEpoch();
 	ut=gmtime(&tc);
+	dt=0;
 	for (i=0;i<Nc;i++)
 	{
-		P=sparoutine(ut, 0, 0, lon,  lat, 0, 1010, 10);
+		P=sparoutine(ut, &dt, 0, lon,  lat, 0, 1010, 10);
 		s+=P.az; // do not optimize this loop out
 	}
 	printf("bogus number %e\n",s);
