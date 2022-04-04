@@ -189,7 +189,7 @@ int main(int argc, char **argv)
 		old=strdup(curtz);
     setenv("TZ", ":/usr/share/zoneinfo/Etc/UTC", 1); // always use UTC
     tzset();
-    ut.tm_year=2000;
+    ut.tm_year=2022-1900;
     ut.tm_mon=0;
     ut.tm_mday=1;
     ut.tm_hour=0;

@@ -11,6 +11,7 @@ test: $(SRC) $(HDR) $(OBJ)
 
 compare: $(SRC) $(HDR) $(OBJ) spa.c spa.h spa.o
 	$(CC) $(CFLAGS) -o comparespa compare_nrel_spa.c $(OBJ) spa.o $(LFLAGS)
-	
+
+freespa.o: $(HDR) freespa.c	
 clean:
 	rm *.o testspa
