@@ -20,7 +20,7 @@ function deltatdata() {
 	year=$1
 	file=$2
 	# columns: year month ?? delta_t
-	awk "/^\s*[0-9]/{y=\$1+\$2/12+\$3/30;if(y>$year){print y,\$4}}" $file
+	awk "/^\s*[0-9]/{y=\$1+(\$2-1)/12+(\$3-1)/372;if(y>$year){print y,\$4}}" $file
 }
 
 function deltatpreds() {
@@ -68,7 +68,6 @@ echo "Added new observed data from $prev up to $last"
 
 cat new_hist_delta_t.dat >tmp.dat
 deltatpreds $last future_delta_t.dat >> tmp.dat
-deltatpreds $last future_delta_t.dat
 
 N=$(wc -l tmp.dat|egrep -o [0-9]+)
 echo $N
