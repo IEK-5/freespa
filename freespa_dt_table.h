@@ -1,13 +1,5 @@
-/* delta t table from -2000 till 2032
- * data from:
- * IERS C02			1830-2022	(https://hpiers.obspm.fr/eop-pc/index.php?index=analysis&lang=en)
- * IERS HMNAO 2021	<1830	 	(https://hpiers.obspm.fr/eop-pc/index.php?index=analysis&lang=en)
- * USNO preds 		>2022	 	(https://www.cnmoc.usff.navy.mil/Organization/United-States-Naval-Observatory/Earth-Orientation-Department/USNO-Earth-Orientation-Products/Long-term-Delta-T/)
- * row mayor order (besselian year/delta t pairs)
- * array must be chronological
- * NDT: number of rows
- */
-#define NDT 829
+/* delta t table from iers data */
+#define NDT 834
 const double freespa_delta_t_table[2*NDT] = {
 	-1999.9979,
 	46080.2,
@@ -1583,10 +1575,20 @@ const double freespa_delta_t_table[2*NDT] = {
 	69.5108,
 	2021.6541,
 	69.4703,
-	2021.75,
-	69.41,
-	2022.00,
-	69.48,
+	2021.7,
+	69.3273,
+	2021.78,
+	69.3033,
+	2021.87,
+	69.2893,
+	2021.95,
+	69.2880,
+	2022.03,
+	69.2908,
+	2022.12,
+	69.2945,
+	2022.2,
+	69.2913,
 	2022.25,
 	69.57,
 	2022.50,
