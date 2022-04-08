@@ -37,6 +37,7 @@ Using these datasources we compiled a table of delta t tables in the file histor
 
 The result is collected in freespa_dt_table_new.h. This new header file may be used to replace the freespa_dt_table.h header.
 
+## References
 [1] I.  Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589
 
 [2] I. Reda and A. Andreas, "Corrigendum to Solar position algorithm for solar radiation applications." Solar Energy 81.6 (2007): 838
