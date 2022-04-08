@@ -1,8 +1,8 @@
-#freespa
-##About freespa
+# freespa
+## About freespa
 This is a free implementation in c of the Solar Position Algorithm (SPA) [1-2]. Another open and free c implementation is provided by NREL [here](http://rredc.nrel.gov/solar/codesandalgorithms/spa/). NREL's SPA is free as in beer. However, it's beer which you are not allowed to share with your friends. You are free to share freespa under the conditions of the [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html). 
 
-##Installation
+## Installation
 Package is not designed to be installed but rather to be inserted in a project. You can add freespa as a submodule to your code, the provided Makefile is designed for this purpose. 
 
 For debugging purposes I also provide code to comapre freespa with NREL SPA, however, to compile that you need to obtain your own copy of [NREL SPA](http://rredc.nrel.gov/solar/codesandalgorithms/spa/). A test program is also provided which should generally suffice for testing the correctness of the algorithm (i.e. you do not need NREL SPA to verify freespa). To run the tests do 
@@ -21,7 +21,7 @@ A reference file contains lines whiche each line whould consist of:
 
 where all angles and coordinates are in radians.
 
-##Delta t
+## Delta t
 For accurate timing the SPA algorithm needs delta t values. Both historic and predicted future values may be obtained here:
 [https://maia.usno.navy.mil/ser7/](https://maia.usno.navy.mil/ser7/)
 
