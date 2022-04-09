@@ -21,6 +21,35 @@ A reference file contains lines whiche each line whould consist of:
 
 where all angles and coordinates are in radians.
 
+## Usage
+The main routine is: 
+
+`sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
+            double lat, double e, double p, double T);`   
+
+where:
+
+* `struct tm *ut`: Standard time struct. Should contain UTC values
+* `double *delta_t`: pointer to delta t value, if it is NULL dleta t is determined from internal tables
+* `double delta_ut1`: deviation between terrestial time and UTC (-1.0..1.0 s)
+* `double lon`: longitude in radians
+* `double lat`: latitude in radians
+* `double e`: Elevation in m
+* `double p`: pressure in mb
+* `double T`: Temperature in C
+
+The return value consists of a data struct:
+
+`typedef struct sol_pos {`
+
+`	double z, a, az, aa; // zenith, azimuth, aparent zenith, aparent azimuth`
+	
+`	int E; // error flag`
+	
+`} sol_pos;`
+
+If the error flag equals 0 all is OK. The double values are the true zenith and azimuth angles (z,a), and the aparant zenith and azimuth (az,aa), including atmnospheric refraction effects. All angles are again in radians. 
+
 ## Delta t
 For accurate timing the SPA algorithm needs delta t values. Both historic and predicted future values may be obtained here:
 [https://maia.usno.navy.mil/ser7/](https://maia.usno.navy.mil/ser7/)

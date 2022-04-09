@@ -6,10 +6,8 @@
 // container struct for solar position data
 typedef struct sol_pos {
 	double z, a, az, aa; // zenith, azimuth, aparent zenith, aparent azimuth
-	int E;
-	//time_t sunrize, sunset, noon;
+	int E; // error flag
 } sol_pos;
-
 double get_delta_t(struct tm *ut);
 // note the time struct must be UTC time, not local!
 sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
