@@ -48,7 +48,7 @@ The return value consists of a data struct:
 	
 `} sol_pos;`
 
-If the error flag equals 0 all is OK. The double values are the true zenith and azimuth angles (z,a), and the aparant zenith and azimuth (az,aa), including atmnospheric refraction effects. All angles are again in radians. 
+If the error flag equals 0 all is OK. The double values are the true zenith and azimuth angles (z,a), and the aparant zenith and azimuth (az,aa), including atmospheric refraction effects. All angles are again in radians. 
 
 ## Delta t
 For accurate timing the SPA algorithm needs delta t values. Both historic and predicted future values may be obtained here:

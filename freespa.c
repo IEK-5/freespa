@@ -22,6 +22,7 @@
 
 /* defines */
 #define JD0 2451545.0 // Julian day noon 1 January 2000 Universal Time
+#define ETJD0 946728000 // unix time for julian day JD0
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
 
 #define EARTH_R 6378136.6 //m at the equator [IERS Numerical Standards (IAG 1999)] 
@@ -141,6 +142,69 @@ JulianDay MakeJulianDayEpoch(time_t t, double *delta_t, double delta_ut1)
 	else
 		JD=MakeJulianDay(&ut, delta_t, delta_ut1);
 	return JD;
+}
+
+// Julian Day to tm struct 
+struct tm *JDgmtime(JulianDay JD, struct tm *ut)
+{
+	double A,B,C,D,F,G,I,Z;
+	double d;
+	Z=trunc(JD.JD+0.5);
+	F=JD.JD-Z;
+	if (Z<2299161)
+		A=Z;
+	else
+	{
+		B=trunc((Z-1867216.25)/36524.25);
+		A=Z+1+B-trunc(B/4.0);
+	}
+	C=A+1524;
+	D=trunc((C-122.1)/365.25);
+	G=trunc(365.25*D);
+	I=trunc((C-G)/30.6001);
+	d=C-G-trunc(30.6001*I)+F-0.5; // day starts at 00:00 not at 12:00
+	
+	// day 
+	ut->tm_mday=(int)trunc(d)+1;
+	// month since jan (0..11)
+	if (I<14)
+		ut->tm_mon=(int)(I-2);
+	else
+		ut->tm_mon=(int)(I-14);
+	// year since 1900	
+	if (ut->tm_mon>1)
+		ut->tm_year=D-4716-1900;
+	else
+		ut->tm_year=D-4715-1900;
+	d-=trunc(d);
+	d*=24.0;
+	ut->tm_hour=(int)trunc(d);
+	d-=trunc(d);
+	d*=60.0;
+	ut->tm_min=(int)trunc(d);
+	d-=trunc(d);
+	d*=60.0;
+	ut->tm_sec=(int)round(d);
+	return ut;	
+}
+// my own quasi epoch routines compatible with julian day
+// We have a fixed number of 86400 seconds per day
+// ignoring leap seconds (i.e. some days time goes faster or slower, as
+// POSIX wants it, or?)
+// Jgmtime Makes UTC time struct from time_t
+struct tm *Jgmtime(time_t t, struct tm *ut)
+{
+	JulianDay J;
+	J.JD=((double)(t-ETJD0)/86400.0)+JD0;
+	JDgmtime(J, ut);
+	return ut;
+}
+// inverse of above
+time_t Jmkgmtime(struct tm *ut)
+{
+	JulianDay J;
+	J=MakeJulianDay(ut, 0, 0);
+	return (J.JD-JD0)*86400+ETJD0;
 }
 
 /* Heliocentric Earth Coordinate ***************************/
@@ -348,7 +412,7 @@ sol_pos solpos(sol_pos P, double lon, double lat, double e, double p, double T, 
 	// aparent sun longitude
 	lambda=GP.lon+dpsi+dtau;
 	
-	// sidereal time at Greenwich This seems off!
+	// sidereal time at Greenwich 
 	v=poly(GSTA,4,JD.JC)+deg2rad(360.98564736629)*(JD.JD - JD0);
 	v+=dpsi*cos(eps);
 	
@@ -424,6 +488,35 @@ sol_pos solpos(sol_pos P, double lon, double lat, double e, double p, double T, 
 	}
 	return P;
 }
+// Equation of Time
+// sun mean longitude polynomial
+const double SMLON[] = {deg2rad(-1/2000000.0),deg2rad(-1/15300.0),deg2rad(1/49931.0),deg2rad(0.03032028),deg2rad(360007.6982779),deg2rad(280.4664567)};
+double EoT(double lat, JulianDay JD, GeoCentricSolPos GP)
+{
+	double M, E;
+	double dtau;
+	double lambda, alpha, eps, deps, dpsi;
+	
+	
+	// aberation correction
+	dtau=deg2rad(-20.4898/3600.0)/GP.rad;
+	
+	// nutation and the obliquity of the ecliptic
+	Nutation_lon_obliquity(JD, &dpsi, &deps);
+	eps=deps+poly(ECLIPTIC_MEAN_OBLIQUITY,11,JD.JME/10)*deg2rad(1/3600.0);
+	
+	// aparent sun longitude
+	lambda=GP.lon+dpsi+dtau;
+	// sun right ascension
+	alpha=atan2(sin(lambda)*cos(eps)-tan(GP.lat)*sin(eps),cos(lambda));
+	M=poly(SMLON,6,JD.JME);
+	E=fmod(M-deg2rad(0.0057183)-alpha+dpsi*cos(eps),2*M_PI);
+	if (E>deg2rad(5))
+		E-=2*M_PI;
+	if (E<-deg2rad(5))
+		E+=2*M_PI;
+	return E;
+}
 
 /* check input values */
 int InputCheck(double delta_ut1, double lon, 
@@ -493,6 +586,25 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 		P=solpos(P,lon,lat,e,p,T,D,G);
 	}
 	return P;
+}
+
+struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double lon, double lat)
+{
+	double E;
+	int sec,min,hour,day,month,year;
+	struct tm nt={0};
+	struct tm *p;	
+	JulianDay D;
+	GeoCentricSolPos G;
+	struct tm st;
+	int Err;
+	
+	D=MakeJulianDay(ut, delta_t, delta_ut1);
+	G=Geocentric_pos(D);
+	E=EoT(lat,D,G);	
+	D.JD+=240.0*lon/86400.0+E/M_PI/2; 
+	JDgmtime(D, &nt);
+	return nt;
 }
 
 /* some unit tests */
