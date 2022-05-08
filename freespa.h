@@ -17,13 +17,20 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double lon, double lat);
 
 
-// my epoch routines
-// There are various calendar definitions
-// it is convenient to have the epoch relate nicely with the julian day
-// routines in this code. For this reason we have our own epoch 
-// definition. (works best on systems where time_t is unsigned 64 bit...)
-struct tm *Jgmtime(time_t t, struct tm *ut); // populate a time struct unix time
-time_t Jmkgmtime(struct tm *ut); // create unix time from time struct
+/* julian unix time routines
+ * For modern day it should be equivalent to the standard routines
+ * in time.h (apart from the fact that mkgmtime is absent on many 
+ * platforms). However, these routines have a 10-day gap between the 
+ * Julian and Gregorian calendar where the Julian calendar ends on 
+ * October 4, 1582 (JD = 2299160), and the next day the Gregorian 
+ * calendar starts on October 15, 1582.
+ * 
+ * This definition of unix time makes it compatible with the julian day 
+ * as it is computed from a date in freespa, i.e. the julian days all 
+ * have 86400 seconds. 
+ */
+struct tm *gmjtime_r(time_t *t, struct tm *ut); // populate a time struct with UTC from unix time
+time_t mkgmjtime(struct tm *ut); // create unix time from time struct
 
 int testjulian();
 int testheliocentricpos();

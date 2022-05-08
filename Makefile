@@ -10,8 +10,10 @@ distdir:
 	cp $(SRC) $(HDR) Makefile reference.dat $(distdir)
 check: test
 	./testspa t reference.dat
-test: $(SRC) $(HDR) $(OBJ)
+	./testtime
+test: $(SRC) $(HDR) $(OBJ) testspa.c testtime.c
 	$(CC) $(CFLAGS) -o testspa testspa.c $(OBJ) $(LFLAGS)
+	$(CC) $(CFLAGS) -o testtime testtime.c $(OBJ) $(LFLAGS)
 
 compare: $(SRC) $(HDR) $(OBJ) spa.c spa.h spa.o
 	$(CC) $(CFLAGS) -o comparespa compare_nrel_spa.c $(OBJ) spa.o $(LFLAGS)

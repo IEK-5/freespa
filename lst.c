@@ -22,14 +22,10 @@ int main(int argc, char **argv)
 	tc=atol(argv[1]);
 	lon=atof(argv[2]);
 	lat=atof(argv[3]);
-	p=gmtime_r(&tc, &ut);
-	strftime (buffer,80,"UTC: %Y-%m-%d %H:%M:%S",&ut);
-	puts(buffer);
-	p=Jgmtime(tc, &ut);
+	p=gmjtime_r(&tc, &ut);
 	strftime (buffer,80,"UTC: %Y-%m-%d %H:%M:%S",&ut);
 	puts(buffer);
 	
-	tc=Jmkgmtime(&ut);
     ut=TrueSolarTime(p, 0, 0, lon, lat);
 	strftime (buffer,80,"LST: %Y-%m-%d %H:%M:%S",&ut);
 	puts(buffer);

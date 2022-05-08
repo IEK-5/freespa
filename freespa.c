@@ -122,28 +122,6 @@ JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 	return JD;
 }
 
-JulianDay MakeJulianDayEpoch(time_t t, double *delta_t, double delta_ut1)
-{
-	struct tm ut;
-	struct tm *p;
-	JulianDay JD;
-	
-	p=gmtime_r(&t, &ut);
-	
-	if (!p)
-	{
-		JD.JD=0.0;
-		JD.JDE=0.0;
-		JD.JC=0.0;
-		JD.JCE=0.0;
-		JD.JME=0.0;
-		JD.E=GMTIMEFAIL;
-	}
-	else
-		JD=MakeJulianDay(&ut, delta_t, delta_ut1);
-	return JD;
-}
-
 // Julian Day to tm struct 
 struct tm *JDgmtime(JulianDay JD, struct tm *ut)
 {
@@ -177,34 +155,67 @@ struct tm *JDgmtime(JulianDay JD, struct tm *ut)
 	else
 		ut->tm_year=D-4715-1900;
 	d-=trunc(d);
-	d*=24.0;
-	ut->tm_hour=(int)trunc(d);
-	d-=trunc(d);
-	d*=60.0;
-	ut->tm_min=(int)trunc(d);
-	d-=trunc(d);
-	d*=60.0;
-	ut->tm_sec=(int)round(d);
+	// d in days
+	d*=86400;
+	d=round(d);
+	ut->tm_sec=((int)d)%60;
+	d-=(double)ut->tm_sec;
+	d/=60;
+	ut->tm_min=((int)d)%60;
+	d-=(double)ut->tm_min;
+	d/=60;
+	ut->tm_hour=((int)d)%60;
+	d-=(double)ut->tm_hour;
 	return ut;	
 }
-// my own quasi epoch routines compatible with julian day
-// We have a fixed number of 86400 seconds per day
-// ignoring leap seconds (i.e. some days time goes faster or slower, as
-// POSIX wants it, or?)
-// Jgmtime Makes UTC time struct from time_t
-struct tm *Jgmtime(time_t t, struct tm *ut)
+
+/* julian unix time routines
+ * For modern day it should be equivalent to the standard routines
+ * in time.h (apart from the fact that mkgmtime is absent on many 
+ * platforms). However these routines have a 10-day gap between the 
+ * Julian and Gregorian calendar where the Julian calendar ends on 
+ * October 4, 1582 (JD = 2299160), and the next day the Gregorian 
+ * calendar starts on October 15, 1582.
+ * 
+ * This definition of unix time makes it compatible with the julian day 
+ * as it is computed from a date in freespa, i.e. the julian days all 
+ * have 86400 seconds. 
+ */
+struct tm *gmjtime_r(time_t *t, struct tm *ut)
 {
 	JulianDay J;
-	J.JD=((double)(t-ETJD0)/86400.0)+JD0;
+	J.JD=((double)((*t)-ETJD0)/86400.0)+JD0;
 	JDgmtime(J, ut);
 	return ut;
 }
 // inverse of above
-time_t Jmkgmtime(struct tm *ut)
+time_t mkgmjtime(struct tm *ut)
 {
 	JulianDay J;
 	J=MakeJulianDay(ut, 0, 0);
-	return (J.JD-JD0)*86400+ETJD0;
+	return (time_t)round((J.JD-JD0)*86400)+ETJD0;
+}
+
+JulianDay MakeJulianDayEpoch(time_t t, double *delta_t, double delta_ut1)
+{
+	struct tm ut;
+	struct tm *p;
+	JulianDay JD;
+	
+	p=gmjtime_r(&t, &ut);
+	
+	if (!p)
+	{
+		JD.JD=0.0;
+		JD.JDE=0.0;
+		JD.JC=0.0;
+		JD.JCE=0.0;
+		JD.JME=0.0;
+		JD.E=GMTIMEFAIL;
+	}
+	else
+		JD=MakeJulianDay(&ut, delta_t, delta_ut1);
+	return JD;
 }
 
 /* Heliocentric Earth Coordinate ***************************/
@@ -618,12 +629,13 @@ int testjulian()
     char* timestr;
 #define JDEPS (1e-3/(24*60*60)) // 1 ms accuracy 
 	JulianDay D;
-	struct tm *ut;
+	struct tm ut;
+	struct tm *p;
 	timestr=malloc(50*sizeof(char));
 	for (i=0;i<N;i++)
 	{
-		ut=gmtime(&dates[i]);	
-		strftime(timestr, 50, "%Y-%m-%d %T %Z",ut);
+		p=gmjtime_r(&dates[i], &ut);	
+		strftime(timestr, 50, "%Y-%m-%d %T %Z",p);
 		printf("testing %s", timestr);
 		D=MakeJulianDayEpoch(dates[i], 0,0);
 		printf("--> JD:%.1f\n", D.JD);
