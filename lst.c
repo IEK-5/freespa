@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 	
 	if (argc!=4)
 	{
-		fprintf(stderr,"Usage: %s time_t lon lat\n", argv[0]);
+		fprintf(stderr,"Usage: %s time_t lon lat (angles in radians)\n", argv[0]);
 		exit(1);
 	}
 	tc=atol(argv[1]);

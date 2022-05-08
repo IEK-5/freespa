@@ -613,7 +613,7 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double
 	D=MakeJulianDay(ut, delta_t, delta_ut1);
 	G=Geocentric_pos(D);
 	E=EoT(lat,D,G);	
-	D.JD+=240.0*lon/86400.0+E/M_PI/2; 
+	D.JD+=(lon+E)/M_PI/2; 
 	JDgmtime(D, &nt);
 	return nt;
 }
