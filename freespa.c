@@ -1,3 +1,42 @@
+/*
+    freespa
+    Copyright (C) 2022  B. E. Pieters,
+    IEK-5 Photovoltaik, Forschunszentrum Juelich
+
+    This program is free software: you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, either version 3 of
+    the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public
+    License along with this program.  If not, see
+    <http://www.gnu.org/licenses/>.
+*/
+/*****************************************************************
+ *  INSTITUT FUER ENERGIE- UND KLIMAFORSCHUNG                    *
+ +  IEK-5 PHOTOVOLTAIK                                           *
+ *                                                               *
+ *        ########                _   _                          *
+ *     ##########                |_| |_|                         *
+ *    ##########     ##         _ _   _ _     ___ ____ _   _     *
+ *   ##########     ####       | | | | | |   |_ _/ ___| | | |    *
+ *   #########     #####    _  | | | | | |    | | |   | |_| |    *
+ *   #    ###     ######   | |_| | |_| | |___ | | |___|  _  |    *
+ *    #          ######     \___/ \___/|_____|___\____|_| |_|    *
+ *     ##      #######      F o r s c h u n g s z e n t r u m    *
+ *       ##########                                              *
+ *                                                               *
+ *   http://www.fz-juelich.de/iek/iek-5/DE/Home/home_node.html   *
+ *****************************************************************
+ *                                                               *
+ *    Dr. Bart E. Pieters 2022                                   *
+ *                                                               *
+ *****************************************************************/
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -122,6 +161,18 @@ JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 	return JD;
 }
 
+JulianDay AddDays(JulianDay JD, int Ndays)
+{
+	double d=(double)Ndays;
+	JD.JD+=d;
+	JD.JDE+=d; // assume delta t does not change!
+	JD.JC+=d/36525.0;
+	JD.JCE+=d/36525.0;
+	JD.JME=JD.JCE/10;
+	return JD;
+}
+
+
 // Julian Day to tm struct 
 struct tm *JDgmtime(JulianDay JD, struct tm *ut)
 {
@@ -187,6 +238,12 @@ struct tm *gmjtime_r(time_t *t, struct tm *ut)
 	J.JD=((double)((*t)-ETJD0)/86400.0)+JD0;
 	JDgmtime(J, ut);
 	return ut;
+}
+
+struct tm *gmjtime(time_t *t)
+{
+	static struct tm _tmbuf;
+	return gmjtime_r(t, &_tmbuf);
 }
 // inverse of above
 time_t mkgmjtime(struct tm *ut)
@@ -565,15 +622,17 @@ int InputCheck(double delta_ut1, double lon,
 
 /* SPA - exported routine to compute the solar position
  * input: 
- *  - t				Unix Time
- *  - delta_t		Δt the difference between the Earth rotation time and the Terrestrial Time
- *  - delta_ut1 	is a fraction of a second that is added to the UTC to adjust for the 
- * 					irregular Earth rotation rate.
- *  - lon			observer longitude
- *  - lat 			observer latitude
- *  - e				observer elevation
+ *  - ut			time struct with UTC
+ *  - delta_t		pointer to Δt value, the difference between the 
+ *                  Earth rotation time and the Terrestrial Time. If 
+ * 					the pointer is NULL, use internal tables to find Δt.
+ *  - delta_ut1 	is a fraction of a second that is added to the UTC 
+ * 					to adjust for the irregular Earth rotation rate.
+ *  - lon			observer longitude (radians)
+ *  - lat 			observer latitude (radians)
+ *  - e				observer elevation (m)
  *  - p				atmospheric pressure (mb)
- *  - T 			Temperature
+ *  - T 			Temperature (C)
  * 
  * output:
  *  - sol_pos struct with the real and aparent solar position
@@ -599,6 +658,20 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 	return P;
 }
 
+/* TrueSolarTime - exported routine to convert UTC to the local solar time
+ * input: 
+ *  - ut			time struct with UTC
+ *  - delta_t		pointer to Δt value, the difference between the 
+ *                  Earth rotation time and the Terrestrial Time. If 
+ * 					the pointer is NULL, use internal tables to find Δt.
+ *  - delta_ut1 	is a fraction of a second that is added to the UTC 
+ * 					to adjust for the irregular Earth rotation rate.
+ *  - lon			observer longitude (radians)
+ *  - lat 			observer latitude (radians)
+ * 
+ * output:
+ *  - tm struct with local solar time
+ */
 struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double lon, double lat)
 {
 	double E;
@@ -609,7 +682,8 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double
 	GeoCentricSolPos G;
 	struct tm st;
 	int Err;
-	
+	if (InputCheck(delta_ut1, lon, lat, 0, 1, 10))
+		return nt;
 	D=MakeJulianDay(ut, delta_t, delta_ut1);
 	G=Geocentric_pos(D);
 	E=EoT(lat,D,G);	
@@ -617,6 +691,188 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double
 	JDgmtime(D, &nt);
 	return nt;
 }
+
+/* SunTimes - exported routine to compute sunrise, transit and sunset 
+ * times.
+ * input: 
+ *  - ut			time struct with UTC. Only used for the date (year, 
+ * 					month, day)
+ *  - delta_t		pointer to Δt value, the difference between the 
+ *                  Earth rotation time and the Terrestrial Time. If 
+ * 					the pointer is NULL, use internal tables to find Δt.
+ *  - delta_ut1 	is a fraction of a second that is added to the UTC 
+ * 					to adjust for the irregular Earth rotation rate.
+ *  - lon			observer longitude (radians)
+ *  - lat 			observer latitude (radians)
+ *  - p				atmospheric pressure (mb)
+ *  - T 			Temperature (C)
+ * 
+ * output:
+ *  - tm structs sunrise, transit, and sunset
+ * 
+ * return value:
+ * 	-1				Polar night. Only transit is computed.
+ *  0				Regular day/night, all times are computed.
+ *  1				Midnight sun. Only transit is computed.
+ */
+int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
+{
+	double dtau, vv, v[3], H,Hp[3], u, x, y;
+	double lambda, alpha[3], delta[3], xi;
+	double delta_prime, H_prime;
+	double dpsi, deps, eps, dalpha;
+	double h[3], dh=0, a_refr, arg;
+	double m[3], n, dt, alphap[3], deltap[3], a,b,c,ap,bp,cp;
+	JulianDay Day[3];
+	GeoCentricSolPos GP;
+	int i;
+	
+	
+	ut.tm_hour=0;
+	ut.tm_min=0;
+	ut.tm_sec=0;
+	
+	if (delta_t)
+		dt=*delta_t;
+	else
+		dt=get_delta_t(&ut);
+		
+	Day[1]=MakeJulianDay(&ut, delta_t, delta_ut1);
+	Day[0]=AddDays(Day[1], -1);
+	Day[2]=AddDays(Day[1], 1);
+	
+	for (i=0;i<3;i++)
+	{
+		GP=Geocentric_pos(Day[i]);
+		// aberation correction
+		dtau=deg2rad(-20.4898/3600.0)/GP.rad;
+		
+		// nutation and the obliquity of the ecliptic
+		Nutation_lon_obliquity(Day[i], &dpsi, &deps);
+		eps=deps+poly(ECLIPTIC_MEAN_OBLIQUITY,11,Day[i].JME/10)*deg2rad(1/3600.0);
+		
+		// aparent sun longitude
+		lambda=GP.lon+dpsi+dtau;
+		
+		// sun right ascension
+		alpha[i]=atan2(sin(lambda)*cos(eps)-tan(GP.lat)*sin(eps),cos(lambda));
+		if (alpha[i]<0)
+			alpha[i]+=2*M_PI;
+			
+		// sun declination
+		delta[i]=asin(sin(GP.lat)*cos(eps)+cos(GP.lat)*sin(eps)*sin(lambda));
+		if (i==1)
+		{
+			// sidereal time at Greenwich 
+			vv=poly(GSTA,4,Day[i].JC)+deg2rad(360.98564736629)*(Day[i].JD - JD0);
+			vv+=dpsi*cos(eps);
+			vv=fmod(vv, 2*M_PI);
+		}
+	}
+	// approximate solar transit time in radians
+	m[0]=(alpha[1]-lon-vv);
+	a_refr=-Bennet(p,T,0.0)-SUN_RADIUS;
+	arg=(sin(a_refr)-sin(lat)*sin(delta[1]))/(cos(lat)*cos(delta[1]));
+	// test if we have a regular sunrise/sunset
+	if ((arg>-1) && (arg<1))
+	{
+		// approximate sun rise and set timnes in radians
+		H=fmod(acos((sin(a_refr)-sin(lat)*sin(delta[1]))/(cos(lat)*cos(delta[1]))), M_PI);
+		m[1]=m[0]-H;
+		m[2]=m[0]+H;
+		
+		// refine the computed times
+		a=alpha[1]-alpha[0];
+		b=alpha[2]-alpha[1];
+		ap=delta[1]-delta[0];
+		bp=delta[2]-delta[1];
+		if (abs(a)>deg2rad(2));
+			fmod(a,deg2rad(1));
+		if (abs(b)>deg2rad(2));
+			fmod(b,deg2rad(1));
+		if (abs(ap)>deg2rad(2));
+			fmod(ap,deg2rad(1));
+		if (abs(bp)>deg2rad(2));
+			fmod(bp,deg2rad(1));
+		c=b-a;
+		cp=bp-ap;
+		
+		for (i=0;i<3;i++)
+		{
+			m[i]=fmod(m[i],2*M_PI)/(2*M_PI);
+			if (m[i]<0)
+				m[i]+=1.0;		
+			v[i]=vv+deg2rad(360.985647)*m[i];
+			n=m[i]+dt/86400;
+			alphap[i]=alpha[1]+n*(a+b+c*n)/2;
+			deltap[i]=delta[1]+n*(ap+bp+cp*n)/2;
+			Hp[i]=fmod(v[i]+lon-alphap[i], 2*M_PI);
+			if (Hp[i]<=-M_PI)
+				Hp[i]+=2*M_PI;
+			if (Hp[i]>=M_PI)
+				Hp[i]-=2*M_PI;			
+			h[i]=asin(sin(lat)*sin(deltap[i])+cos(lat)*cos(deltap[i])*cos(Hp[i]));
+		}
+		Day[0].JD=Day[1].JD;
+		Day[2].JD=Day[1].JD;
+		Day[1].JD+=m[0]-Hp[0]/2/M_PI;
+		Day[0].JD+=m[1]+(h[1]-a_refr)/2/M_PI/cos(deltap[1])/cos(lat)/sin(Hp[1]);
+		Day[2].JD+=m[2]+(h[2]-a_refr)/2/M_PI/cos(deltap[2])/cos(lat)/sin(Hp[2]);
+		
+		// noon is computed for the given date
+		// sunrise must be before that time and unset after
+		if (Day[0].JD>Day[1].JD)
+			Day[0].JD-=1.0;
+		if (Day[1].JD>Day[2].JD)
+			Day[2].JD+=1.0;
+			
+		// populate the tm structs
+		JDgmtime(Day[0],sunrise);
+		JDgmtime(Day[1],transit);
+		JDgmtime(Day[2],sunset);
+		return 0;
+	}
+	else
+	{
+		// no sunrise and sunset
+		// refine the computed solar noon
+		a=alpha[1]-alpha[0];
+		b=alpha[2]-alpha[1];
+		ap=delta[1]-delta[0];
+		bp=delta[2]-delta[1];
+		if (abs(a)>deg2rad(2));
+			fmod(a,deg2rad(1));
+		if (abs(b)>deg2rad(2));
+			fmod(b,deg2rad(1));
+		if (abs(ap)>deg2rad(2));
+			fmod(ap,deg2rad(1));
+		if (abs(bp)>deg2rad(2));
+			fmod(bp,deg2rad(1));
+		c=b-a;
+		cp=bp-ap;
+		m[0]=fmod(m[0],2*M_PI)/(2*M_PI);
+		if (m[0]<0)
+			m[0]+=1.0;		
+		v[0]=vv+deg2rad(360.985647)*m[0];
+		n=m[0]+dt/86400;
+		alphap[0]=alpha[1]+n*(a+b+c*n)/2;
+		deltap[0]=delta[1]+n*(ap+bp+cp*n)/2;
+		Hp[0]=fmod(v[0]+lon-alphap[0], 2*M_PI);
+		if (Hp[0]<=-M_PI)
+			Hp[0]+=2*M_PI;
+		if (Hp[0]>=M_PI)
+			Hp[0]-=2*M_PI;
+		h[0]=asin(sin(lat)*sin(deltap[0])+cos(lat)*cos(deltap[0])*cos(Hp[0]));			
+		
+		Day[1].JD+=m[0]-Hp[0]/2/M_PI;
+		JDgmtime(Day[1],sunrise);
+		JDgmtime(Day[1],transit);
+		JDgmtime(Day[1],sunset);
+		// polar night (-1) or midnight sun (+1)?
+		return 2*(h[0]>0)-1;
+	}
+}
+
 
 /* some unit tests */
 // unit test julian date computation with a table of dates

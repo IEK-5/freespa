@@ -1,3 +1,42 @@
+/*
+    freespa
+    Copyright (C) 2022  B. E. Pieters,
+    IEK-5 Photovoltaik, Forschunszentrum Juelich
+
+    This program is free software: you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, either version 3 of
+    the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public
+    License along with this program.  If not, see
+    <http://www.gnu.org/licenses/>.
+*/
+/*****************************************************************
+ *  INSTITUT FUER ENERGIE- UND KLIMAFORSCHUNG                    *
+ +  IEK-5 PHOTOVOLTAIK                                           *
+ *                                                               *
+ *        ########                _   _                          *
+ *     ##########                |_| |_|                         *
+ *    ##########     ##         _ _   _ _     ___ ____ _   _     *
+ *   ##########     ####       | | | | | |   |_ _/ ___| | | |    *
+ *   #########     #####    _  | | | | | |    | | |   | |_| |    *
+ *   #    ###     ######   | |_| | |_| | |___ | | |___|  _  |    *
+ *    #          ######     \___/ \___/|_____|___\____|_| |_|    *
+ *     ##      #######      F o r s c h u n g s z e n t r u m    *
+ *       ##########                                              *
+ *                                                               *
+ *   http://www.fz-juelich.de/iek/iek-5/DE/Home/home_node.html   *
+ *****************************************************************
+ *                                                               *
+ *    Dr. Bart E. Pieters 2022                                   *
+ *                                                               *
+ *****************************************************************/
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -53,7 +92,10 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 	spa.hour=ut->tm_hour;
 	spa.minute=ut->tm_min;
 	spa.second=(double)ut->tm_sec;
-	spa.delta_t=*delta_t;
+	if (delta_t)
+		spa.delta_t=*delta_t;
+	else
+		spa.delta_t=get_delta_t(ut);
 	spa.delta_ut1=delta_ut1;
 	spa.timezone=0;
 	spa.longitude=180.0*lon/M_PI;
@@ -73,8 +115,8 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 	P.z+=M_PI*spa.del_e/180;
 	return P;
 }
-
-#define MIN_EPOCH -125197920000 // year -2000
+//#define MIN_EPOCH -125197920000 // year -2000
+#define MIN_EPOCH -125282592000 // year -2000
 #define MAX_EPOCH 127090080000 // year +6000
 time_t RandEpoch()
 {
@@ -107,7 +149,7 @@ int SpecificTester(time_t tc, double lat, double lon, int verb)
 	double d, dt;
 	char* timestr;
 	struct tm *ut;
-	ut=gmtime(&tc);
+	ut=gmjtime(&tc);
 	dt=get_delta_t(ut);
 	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
 		dt=0;
@@ -143,8 +185,8 @@ int RandomTester()
 }
 #define LAT 50.902996388
 #define LON 6.407165038
-#define N 1000
-#define NN 10000
+#define N 10000 // number of coordinates to test
+#define NN 10000 // number of performancve test iterations
 // benchmark routine speed
 double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double *, double, double, double, double, double , double))
 {
@@ -158,7 +200,7 @@ double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double *, double, double,
 	lon=RandLon();
 	lat=RandLat();// only one random parameter in loop, saves time
 	tc=RandEpoch();
-	ut=gmtime(&tc);
+	ut=gmjtime(&tc);
 	dt=0;
 	for (i=0;i<Nc;i++)
 	{
@@ -168,21 +210,168 @@ double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double *, double, double,
 	printf("bogus number %e\n",s);
 	return TOC(&t);
 }
+
+
+/* test time routines */
+
+// simple wrapper around NREL's spa code
+int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1, 
+			double lon, double lat, double p, double T, 
+			struct tm *sunrise, struct tm *transit, struct tm *sunset)
+{
+	spa_data spa;
+	time_t t, t0, tt;	
+	
+	spa.year=ut.tm_year+1900;
+	spa.month=ut.tm_mon+1;
+	spa.day=ut.tm_mday;
+	spa.hour=ut.tm_hour;
+	spa.minute=ut.tm_min;
+	spa.second=(double)ut.tm_sec;
+	if (delta_t)
+		spa.delta_t=*delta_t;
+	else
+		spa.delta_t=get_delta_t(&ut);
+	spa.delta_ut1=delta_ut1;
+	spa.timezone=0;
+	spa.longitude=180.0*lon/M_PI;
+	spa.latitude=180.0*lat/M_PI;
+	spa.elevation=0;
+	spa.pressure=p;
+	spa.temperature=T;
+	spa.slope=0;
+	spa.azm_rotation=0;
+	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
+	spa.function=SPA_ZA_RTS;
+	spa_calculate(&spa);
+	if ((spa.sunrise<0)||(spa.sunset<0)||(spa.suntransit<0))
+		return 1;
+	
+	ut.tm_hour=0;
+	ut.tm_min=0;
+	ut.tm_sec=0;
+	t0=mkgmjtime(&ut);
+	
+	tt=t0+(time_t)(3600*spa.suntransit);
+	transit=gmjtime_r(&tt, transit);
+	
+	t=t0+(time_t)(3600*spa.sunrise);
+	if (t>tt)
+		t-=86400;
+	sunrise=gmjtime_r(&t, sunrise);
+	t=t0+(time_t)(3600*spa.sunset);
+	if (t<tt)
+		t+=86400;
+	sunset=gmjtime_r(&t, sunset);
+	return 0;
+}
+#define TIMEEPS 60
+int TimeTester(time_t tc, double lat, double lon, int verb)
+{
+	int R=0;
+	double dt;
+	char buffer [80];
+	struct tm ut;
+	struct tm *p;
+	struct tm sunset_nrel, sunrise_nrel, transit_nrel;
+	struct tm sunset_free, sunrise_free, transit_free;
+	time_t t1, t2;
+	
+	p=gmjtime_r(&tc, &ut);
+	dt=get_delta_t(p);
+	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
+		dt=0;
+	if (SPA_SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel)==0)
+	{
+		int r;
+		r=SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
+		
+		// transit is always determined
+		t1=mkgmjtime(&transit_nrel);
+		t2=mkgmjtime(&transit_free);
+		R=(abs((int)(t1-t2))>TIMEEPS);
+		R<<=1;
+		if (r==0)
+		{
+			t1=mkgmjtime(&sunrise_nrel);
+			t2=mkgmjtime(&sunrise_free);
+			R|=(abs((int)(t1-t2))>TIMEEPS);
+			R<<=1;
+			t1=mkgmjtime(&sunset_nrel);
+			t2=mkgmjtime(&sunset_free);
+			R|=(abs((int)(t1-t2))>TIMEEPS);
+			if (R||verb)
+			{
+				printf("Location: %.4f N %.4f E\n", 180*lat/M_PI, 180*lon/M_PI);
+				strftime (buffer,80,"Day: %Y-%m-%d", &ut);
+				puts(buffer);
+				strftime (buffer,80,"Sun Rise: %Y-%m-%d %H:%M:%S",&sunrise_nrel);
+				puts(buffer);
+				strftime (buffer,80,"Sun Rise: %Y-%m-%d %H:%M:%S",&sunrise_free);
+				puts(buffer);
+				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_nrel);
+				puts(buffer);
+				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_free);
+				puts(buffer);
+				strftime (buffer,80,"Sun Set : %Y-%m-%d %H:%M:%S",&sunset_nrel);
+				puts(buffer);
+				strftime (buffer,80,"Sun Set : %Y-%m-%d %H:%M:%S",&sunset_free);
+				puts(buffer);
+			}
+		}
+		else
+		{
+			R<<=1;
+			R|=3;
+			if (R||verb)
+			{
+				printf("Location: %.4f N %.4f E\n", 180*lat/M_PI, 180*lon/M_PI);
+				strftime (buffer,80,"Day: %Y-%m-%d",&ut);
+				puts(buffer);
+				if (r<0)
+					printf("freespa says it is a polar night\n");
+				else
+					printf("freespa says there is midnight sun\n");
+				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_nrel);
+				puts(buffer);
+				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_free);
+				puts(buffer);
+			}
+		}
+	}
+	return R;
+}
+
+int RandomTimeTester()
+{
+	time_t tc;
+	double lat, lon, d;
+	sol_pos P1, P2;
+	lat=RandLat();
+	lon=RandLon();
+	tc=RandEpoch();
+	return TimeTester(tc, lat, lon,0);
+}
 int main()
 {
 	sol_pos P1, P2;
 	spa_data spa;
-	double t, e;
+	double t, e, dt, sr, ss, tr, h, m, s;
 	time_t tc;
 	char *curtz = getenv("TZ"); // Make a copy of the timezone variable
 	char *old=NULL;
 	int sum=0,i;
 	int NE=0;
+	struct tm ut={}, *p;
+	tc=1652254722;
+	p=gmjtime_r(&tc, &ut);
+	dt=get_delta_t(p);
 	
 	if (curtz)
 		old=strdup(curtz);
     setenv("TZ", ":/usr/share/zoneinfo/Etc/UTC", 1); // always use UTC
     tzset();
+	
 	
 	
 	srand((unsigned) time(&tc));
@@ -207,6 +396,18 @@ int main()
 	t=Perf(NN, &SPA_Wrapper);
 	printf("NREL spa used %f s (%.1f us/call)\n", NN, t, 1e6*t/NN);
 	
+	TIC(&t);
+	for (i=0;i<N;i++)
+	{
+		if (RandomTimeTester())
+		{
+			fprintf(stderr,"Error: the spa's do not match!\n");
+			NE++;
+		}
+	}
+	printf("tested %d coodinates and times\n", N);
+	printf("%d errors\n", NE);
+	t=TOC(&t);
     if (old)
     {
 		printf("%s\n", old);
