@@ -45,6 +45,9 @@
 #include "freespa.h"
 
 
+#define deg2rad(a) (M_PI*(a)/180.0)
+#define rad2deg(a) (180.0*(a)/M_PI)
+#define SUN_RADIUS 4.6542695162932789e-03 // in radians
 int main(int argc, char **argv)
 {
 	double lon,lat;
@@ -54,31 +57,40 @@ int main(int argc, char **argv)
 	struct tm *p;
 	char buffer [80];
 	struct tm sunrise={0}, sunset={0}, transit={0};
+	sol_pos P;
+	double Esr, Ess, Etr;
 	
 	if (argc!=4)
 	{
-		fprintf(stderr,"Usage: %s time_t lon lat (angles in radians)\n", argv[0]);
+		fprintf(stderr,"Usage: %s time_t lon lat (angles in derees)\n", argv[0]);
 		exit(1);
 	}
 	tc=atol(argv[1]);
-	lon=atof(argv[2]);
-	lat=atof(argv[3]);
+	lon=deg2rad(atof(argv[2]));
+	lat=deg2rad(atof(argv[3]));
 	p=gmjtime_r(&tc, &ut);
-	strftime (buffer,80,"UTC: %Y-%m-%d %H:%M:%S",&ut);
+	strftime (buffer,80,"UTC:\t\t%Y-%m-%d %H:%M:%S",&ut);
 	puts(buffer);
 	
-	r=SunTimes(ut, NULL, 0, lon, lat, 1010, 10, &sunrise, &transit, &sunset);
     ut=TrueSolarTime(p, 0, 0, lon, lat);
-	strftime (buffer,80,"LST: %Y-%m-%d %H:%M:%S",&ut);
+	strftime (buffer,80,"LST:\t\t%Y-%m-%d %H:%M:%S",&ut);
 	puts(buffer);
+	
+	r=SunTimes(ut, NULL, 0, lon, lat, 0, 1010, 10, &sunrise, &transit, &sunset);
 	if (r==0)
 	{
-		strftime (buffer,80,"Sun Rise: %Y-%m-%d %H:%M:%S",&sunrise);
-		puts(buffer);
-		strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit);
-		puts(buffer);
-		strftime (buffer,80,"Sun Set : %Y-%m-%d %H:%M:%S",&sunset);
-		puts(buffer);
+		P=SPA(&sunrise, NULL, 0, lon,  lat, 0, 1010, 10);
+		Esr=P.az-M_PI/2-SUN_RADIUS;
+		P=SPA(&sunset, NULL, 0, lon,  lat, 0, 1010, 10);
+		Ess=P.az-M_PI/2-SUN_RADIUS;
+		P=SPA(&transit, NULL, 0, lon,  lat, 0, 1010, 10);
+		Etr=atan(sin(P.aa)*fabs(tan(P.az)));
+		strftime (buffer,80,"Sun Rise:\t%Y-%m-%d %H:%M:%S",&sunrise);
+		printf("%s (error %.3g degrees)\n", buffer, rad2deg(Esr));
+		strftime (buffer,80,"Transit:\t%Y-%m-%d %H:%M:%S",&transit);
+		printf("%s (error %.3g degrees)\n", buffer, rad2deg(Etr));
+		strftime (buffer,80,"Sun Set:\t%Y-%m-%d %H:%M:%S",&sunset);
+		printf("%s (error %.3g degrees)\n", buffer, rad2deg(Ess));
 	}
 	else
 	{
@@ -87,9 +99,12 @@ int main(int argc, char **argv)
 		else
 			printf("midnight sun\n");
 		
-		strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit);
-		puts(buffer);
-	}	
+		P=SPA(&transit, NULL, 0, lon,  lat, 0, 1010, 10);
+		Etr=atan(sin(P.aa)*fabs(tan(P.az)));
+		strftime (buffer,80,"Transit:\t%Y-%m-%d %H:%M:%S",&transit);
+		printf("%s (error %.3g degrees)\n", buffer, rad2deg(Etr));
+	}
+		
 	
 	exit(0);
 }

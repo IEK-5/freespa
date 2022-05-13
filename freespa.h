@@ -68,7 +68,7 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1,
  * this right.
  */
 int SunTimes(struct tm ut, double *delta_t, double delta_ut1, 
-			double lon, double lat, double p, double T, 
+			double lon, double lat, double e, double p, double T, 
 			struct tm *sunrise, struct tm *transit, struct tm *sunset);
 
 

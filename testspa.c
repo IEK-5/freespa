@@ -91,7 +91,7 @@ int LogSPA(char *fn, int N)
 	
 	if ((f=fopen(fn,"w"))==NULL)
 	{
-		fprintf(stderr,"Error: failed to open %s for writing\n");
+		fprintf(stderr,"Error: failed to open %s for writing\n", fn);
 		return 1;
 	}
 	
@@ -139,7 +139,7 @@ int TestSPA(char *fn)
 	sol_pos P, Pr;
 	int Et=0, Ec=0;
 	int i,j=0;
-	char line[LLEN],c;
+	char line[LLEN];
 	struct tm ut, *p;
 	FILE *f;
 	time_t tc;
@@ -149,7 +149,7 @@ int TestSPA(char *fn)
 	
 	if ((f=fopen(fn,"r"))==NULL)
 	{
-		fprintf(stderr,"Error: failed to open %s for reading\n");
+		fprintf(stderr,"Error: failed to open %s for reading\n", fn);
 		return 1;
 	}
 	while (!feof(f))
@@ -209,7 +209,6 @@ int main(int argc, char **argv)
 	int r=0;
 	char *curtz = getenv("TZ"); // Make a copy of the timezone variable
 	char *old=NULL;
-	time_t tc;
 	struct tm ut={0};
 	
 	if (argc!=3)

@@ -675,13 +675,9 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double lon, double lat)
 {
 	double E;
-	int sec,min,hour,day,month,year;
 	struct tm nt={0};
-	struct tm *p;	
 	JulianDay D;
 	GeoCentricSolPos G;
-	struct tm st;
-	int Err;
 	if (InputCheck(delta_ut1, lon, lat, 0, 1, 10))
 		return nt;
 	D=MakeJulianDay(ut, delta_t, delta_ut1);
@@ -692,8 +688,16 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double
 	return nt;
 }
 
-/* SunTimes - exported routine to compute sunrise, transit and sunset 
- * times.
+/* SunTimes_nrel - NREL's algorithm (see documentation at 
+ * https://midcdmz.nrel.gov/spa/)
+ * Makes an approximate guess and does one (Newton?) step to refine the 
+ * solution. Routine ignores observer elevation and does not verify its 
+ * results (i.e. the error is not evaluated).
+ * 
+ * freesdpa uses this routine for a first solution and use iterative 
+ * solvers to refine the solution further, if needed. This way freespa
+ * corrects for observer elevation.
+ * 
  * input: 
  *  - ut			time struct with UTC. Only used for the date (year, 
  * 					month, day)
@@ -715,13 +719,27 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double
  *  0				Regular day/night, all times are computed.
  *  1				Midnight sun. Only transit is computed.
  */
-int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
+double ablim(double a)
 {
-	double dtau, vv, v[3], H,Hp[3], u, x, y;
-	double lambda, alpha[3], delta[3], xi;
-	double delta_prime, H_prime;
-	double dpsi, deps, eps, dalpha;
-	double h[3], dh=0, a_refr, arg;
+// weird to limit these deltas to 1/2 degrees, or?
+//#define ALIM 2*M_PI
+//#define AALIM M_PI
+#define ALIM deg2rad(2)
+#define AALIM deg2rad(1)
+	if (fabs(a)>ALIM)
+	{
+		if (a<0)
+			a+=2*M_PI;
+		a=fmod(a,AALIM);
+	}
+	return a;
+}
+int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
+{
+	double dtau, vv, v[3], H,Hp[3];
+	double lambda, alpha[3], delta[3];
+	double dpsi, deps, eps;
+	double h[3], a_refr, arg;
 	double m[3], n, dt, alphap[3], deltap[3], a,b,c,ap,bp,cp;
 	JulianDay Day[3];
 	GeoCentricSolPos GP;
@@ -786,14 +804,10 @@ int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double
 		b=alpha[2]-alpha[1];
 		ap=delta[1]-delta[0];
 		bp=delta[2]-delta[1];
-		if (abs(a)>deg2rad(2));
-			fmod(a,deg2rad(1));
-		if (abs(b)>deg2rad(2));
-			fmod(b,deg2rad(1));
-		if (abs(ap)>deg2rad(2));
-			fmod(ap,deg2rad(1));
-		if (abs(bp)>deg2rad(2));
-			fmod(bp,deg2rad(1));
+		a=ablim(a);
+		b=ablim(b);
+		ap=ablim(ap);
+		bp=ablim(bp);
 		c=b-a;
 		cp=bp-ap;
 		
@@ -840,14 +854,10 @@ int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double
 		b=alpha[2]-alpha[1];
 		ap=delta[1]-delta[0];
 		bp=delta[2]-delta[1];
-		if (abs(a)>deg2rad(2));
-			fmod(a,deg2rad(1));
-		if (abs(b)>deg2rad(2));
-			fmod(b,deg2rad(1));
-		if (abs(ap)>deg2rad(2));
-			fmod(ap,deg2rad(1));
-		if (abs(bp)>deg2rad(2));
-			fmod(bp,deg2rad(1));
+		a=ablim(a);
+		b=ablim(b);
+		ap=ablim(ap);
+		bp=ablim(bp);
 		c=b-a;
 		cp=bp-ap;
 		m[0]=fmod(m[0],2*M_PI)/(2*M_PI);
@@ -864,14 +874,382 @@ int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double
 			Hp[0]-=2*M_PI;
 		h[0]=asin(sin(lat)*sin(deltap[0])+cos(lat)*cos(deltap[0])*cos(Hp[0]));			
 		
+		// only the transit timne is valid
+		// the sunrise and sunset times are set as min/max bounds
+		// to aid iterative refinement 
 		Day[1].JD+=m[0]-Hp[0]/2/M_PI;
-		JDgmtime(Day[1],sunrise);
+		Day[0]=AddDays(Day[1], -1);
+		Day[2]=AddDays(Day[1], 1);
+		JDgmtime(Day[0],sunrise);
 		JDgmtime(Day[1],transit);
-		JDgmtime(Day[1],sunset);
+		JDgmtime(Day[2],sunset);
 		// polar night (-1) or midnight sun (+1)?
 		return 2*(h[0]>0)-1;
 	}
 }
+
+/* In case the NREL algorithm is inaccurate we can iteratively improve 
+ * the solution. I should study NREL's algorithm and try to make a good 
+ * solution. However, out of lazyness I for now settle for inefficient 
+ * bisection.
+ */ 
+// return the elevation of the sun in radians for time t
+double SunRiseSetErr(time_t t, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
+{
+	sol_pos P;
+	struct tm ut={0}, *put;
+	put=gmtime_r(&t, &ut);
+	P=SPA(put, delta_t, delta_ut1, lon, lat, e, p, T);
+	return P.az-M_PI/2-SUN_RADIUS;
+}
+// return the error in transit angle in radians for time t
+double SunTransitErr(time_t t, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
+{
+	sol_pos P;
+	struct tm ut={0}, *put;
+	put=gmtime_r(&t, &ut);
+	P=SPA(put, delta_t, delta_ut1, lon, lat, e, p, T);
+	return atan(sin(P.aa)*fabs(tan(P.az))); // angle with the plane x=0;
+}
+
+/* bisection algorithms:
+ * Bisection routines use a temperal resolution of 1 second
+ * i.e., it will not refine a solution beyond a second resolution, even 
+ * if angles are off more than the given eps
+ * This way the routines are guaranteed to finish
+ */ 
+
+time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
+{
+	time_t tmin, tmax, t, to;
+	double E, Emin, Emax, Eo;
+	int i;
+	
+	(*Err)=0;
+	t=mkgmjtime(sunrise);
+	E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+	to=t;
+	Eo=fabs(E);
+	if (E>0)
+	{
+		tmin=t;
+		Emin=E;
+		tmax=mkgmjtime(transit);
+		Emax=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+		i=0;
+		while((Emax>0)&&(i<2))// search forward 0.5 days
+		{
+			tmax+=21600;
+			Emax=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+			i++;		
+		}
+		if (fabs(Emax)<Eo)
+		{
+			to=tmax;
+			Eo=fabs(Emax);
+		}
+		if (Emax>0)
+		{
+			//printf("sunsise non bracketet tmax\n");
+			(*Err)=1;
+			return to;
+		}
+	}
+	else
+	{
+		tmax=t;
+		Emax=E;	
+	
+		tmin=tmax-21600;
+		Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+		i=0;
+		while((Emin<0)&&(i<2)) // search back 0.5 days
+		{
+			tmin-=21600;
+			Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+			i++;		
+		}
+		if (fabs(Emin)<Eo)
+		{
+			to=tmin;
+			Eo=fabs(Emin);
+		}
+		if (Emin<0)
+		{
+			//printf("sunsise non bracketet tmin\n");
+			(*Err)=1;
+			return to;
+		}
+	}
+	
+	E=Eo;
+	while ((fabs(E)>eps)&&(tmax-tmin>1))
+	{
+		E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+		if (E>0)
+		{
+			tmin=t;
+			Emin=E;
+		}
+		else
+		{
+			tmax=t;
+			Emax=E;
+		}
+		if (fabs(E)<Eo)
+		{
+			to=t;
+			Eo=fabs(E);
+		}
+		t=(tmax+tmin)/2;
+	}
+	E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+	if (fabs(E)<Eo)
+	{
+		to=t;
+		Eo=fabs(E);
+	}
+	return to;
+}
+			
+
+time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
+{
+	
+	time_t tmin, tmax, t, to;
+	double E, Emin, Emax, Eo;
+	int i;
+	
+	(*Err)=0;
+	t=mkgmjtime(sunset);
+	E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+	to=t;
+	Eo=fabs(E);
+	if (E<0)
+	{
+		tmin=t;
+		Emin=E;	
+	
+		tmax=tmax+21600;
+		Emax=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+		i=0;
+		while((Emax<0)&&(i<2))
+		{
+			tmax+=21600;
+			Emax=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+			i++;		
+		}
+		if (fabs(Emax)<Eo)
+		{
+			to=tmax;
+			Eo=fabs(Emax);
+		}
+		if (Emax<0)
+		{
+			//printf("sunset non bracketet tmax\n");
+			(*Err)=1;
+			return to;
+		}
+	}
+	else
+	{
+		tmax=t;
+		Emax=E;
+		
+		tmin=mkgmjtime(transit);
+		Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+		i=0;
+		while((Emin>0)&&(i<2))
+		{
+			tmin-=21600;
+			Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+			i++;		
+		}
+		if (fabs(Emin)<Eo)
+		{
+			to=tmin;
+			Eo=fabs(Emin);
+		}
+		if (Emin>0)
+		{
+			//printf("sunset non bracketet tmin\n");
+			(*Err)=1;
+			return to;
+		}
+	}
+	
+	E=Eo;
+	while ((fabs(E)>eps)&&(tmax-tmin>1))
+	{
+		E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+		if (E>0)
+		{
+			tmax=t;
+			Emax=E;
+		}
+		else
+		{
+			tmin=t;
+			Emin=E;
+		}
+		if (fabs(E)<Eo)
+		{
+			to=t;
+			Eo=fabs(E);
+		}
+		t=(tmax+tmin)/2;
+	}
+	E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+	if (fabs(E)<Eo)
+	{
+		to=t;
+		Eo=fabs(E);
+	}
+	return to;
+}
+
+time_t BisectTransit(struct tm *sunrise, struct tm *transit,struct tm *sunset, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
+{
+	time_t tmin, tmax, t, to;
+	double E, Eo;
+	int i;
+
+	(*Err)=0;
+	t=mkgmjtime(transit);
+	E=SunTransitErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+	to=t;
+	Eo=fabs(E);
+	if (E>0)
+	{
+		tmin=t;
+		tmax=t+21600;
+		E=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+		i=0;
+		while((E>0)&&(i<2))
+		{
+			tmin=tmax;
+			tmax+=21600;
+			E=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+			i++;		
+		}
+		if (fabs(E)<Eo)
+		{
+			to=tmax;
+			Eo=fabs(E);
+		}
+		if (E>0)
+		{
+			//printf("transit non bracketet tmax\n");
+			(*Err)=1;
+			return to;
+		}
+	}
+	else
+	{
+		tmax=t;
+		tmin=t-21600;
+		E=SunTransitErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+		i=0;
+		while((E<0)&&(i<2))
+		{
+			tmax=tmin;
+			tmin-=21600;
+			E=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+			i++;		
+		}
+		if (fabs(E)<Eo)
+		{
+			to=tmin;
+			Eo=fabs(E);
+		}
+		if (E<0)
+		{
+			//printf("transit non bracketet tmin\n");
+			(*Err)=1;
+			return to;
+		}
+	}
+	
+	E=Eo;
+	while ((fabs(E)>eps)&&(tmax-tmin>1))
+	{
+		E=SunTransitErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+		if (E>0)
+			tmin=t;
+		else
+			tmax=t;
+		if (fabs(E)<Eo)
+		{
+			Eo=fabs(E);
+			to=t;
+		}
+		t=(tmax+tmin)/2;
+	}
+	return to;
+}
+
+/* SunTimes - exported routine for the solar times
+ * Uses the NREL algorithm as a first guess and interatively improves it
+ * if needed. Alos includes the effects of observer elevation. 
+ * input: 
+ *  - ut			time struct with UTC. Only used for the date (year, 
+ * 					month, day)
+ *  - delta_t		pointer to Δt value, the difference between the 
+ *                  Earth rotation time and the Terrestrial Time. If 
+ * 					the pointer is NULL, use internal tables to find Δt.
+ *  - delta_ut1 	is a fraction of a second that is added to the UTC 
+ * 					to adjust for the irregular Earth rotation rate.
+ *  - lon			observer longitude (radians)
+ *  - lat 			observer latitude (radians)
+ *  - p				atmospheric pressure (mb)
+ *  - T 			Temperature (C)
+ * 
+ * output:
+ *  - tm structs sunrise, transit, and sunset
+ * 
+ * return value:
+ * 	-1				Polar night. Only transit is computed.
+ *  0				Regular day/night, all times are computed.
+ *  1				Midnight sun. Only transit is computed.
+ *  10				Don't trust the results
+ */ 
+#define ST_EPS deg2rad(0.1)	// do not make it too small, accurate predictions are not possible anyway.
+int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
+{
+	time_t t;
+	int r, E;
+	
+	r=SunTimes_nrel(ut, delta_t, delta_ut1, lon, lat, p, T, sunrise, transit, sunset);
+	/* currently I ignore errors when the root is not bracketet.
+	 * My tests show it always is at large latitudes/ polar night/midnight sun kind of 
+	 * conditions where accurate ansewers are not possible
+	 */
+	
+	if (r==0)
+	{
+		t=BisectSunRise(sunrise, transit, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
+		gmjtime_r(&t,sunrise);
+		t=BisectSunSet(sunset, transit, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
+		gmjtime_r(&t,sunset);
+		t=BisectTransit(sunrise, transit, sunset, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
+		gmjtime_r(&t,transit);
+		return 0;
+	}
+	else
+	{
+		sol_pos P;
+		t=BisectTransit(sunrise, transit, sunset, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
+		gmjtime_r(&t,transit);
+		
+		P=SPA(transit, delta_t, delta_ut1, lon, lat, e, p, T);
+		if (P.az>M_PI/2)
+			return -1;
+		else
+			return 1;
+	}
+}	
+	
+
 
 
 /* some unit tests */

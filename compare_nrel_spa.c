@@ -116,8 +116,10 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 	return P;
 }
 //#define MIN_EPOCH -125197920000 // year -2000
-#define MIN_EPOCH -125282592000 // year -2000
-#define MAX_EPOCH 127090080000 // year +6000
+//#define MIN_EPOCH -125282592000 // year -2000
+//#define MAX_EPOCH 127090080000 // year +6000
+#define MIN_EPOCH 946681200 // year 2000
+#define MAX_EPOCH 1640991600 // year 2022
 time_t RandEpoch()
 {
 	/* generate a random epoch between MIN_EPOCH and MAX_EPOCH
@@ -281,63 +283,21 @@ int TimeTester(time_t tc, double lat, double lon, int verb)
 	dt=get_delta_t(p);
 	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
 		dt=0;
-	if (SPA_SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel)==0)
+	
+	R=SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
+	if (R)
 	{
-		int r;
-		r=SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
-		
-		// transit is always determined
-		t1=mkgmjtime(&transit_nrel);
-		t2=mkgmjtime(&transit_free);
-		R=(abs((int)(t1-t2))>TIMEEPS);
-		R<<=1;
-		if (r==0)
+		sol_pos P;
+		double E;
+		SPA_SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel);
+		P=SPA(&sunrise_free, &dt, 0, lon,  lat, 0, 1010, 10);
+		E=P.az-M_PI/2;
+		R=0;
+		if (fabs(E)>deg2rad(1))
 		{
-			t1=mkgmjtime(&sunrise_nrel);
-			t2=mkgmjtime(&sunrise_free);
-			R|=(abs((int)(t1-t2))>TIMEEPS);
-			R<<=1;
-			t1=mkgmjtime(&sunset_nrel);
-			t2=mkgmjtime(&sunset_free);
-			R|=(abs((int)(t1-t2))>TIMEEPS);
-			if (R||verb)
-			{
-				printf("Location: %.4f N %.4f E\n", 180*lat/M_PI, 180*lon/M_PI);
-				strftime (buffer,80,"Day: %Y-%m-%d", &ut);
-				puts(buffer);
-				strftime (buffer,80,"Sun Rise: %Y-%m-%d %H:%M:%S",&sunrise_nrel);
-				puts(buffer);
-				strftime (buffer,80,"Sun Rise: %Y-%m-%d %H:%M:%S",&sunrise_free);
-				puts(buffer);
-				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_nrel);
-				puts(buffer);
-				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_free);
-				puts(buffer);
-				strftime (buffer,80,"Sun Set : %Y-%m-%d %H:%M:%S",&sunset_nrel);
-				puts(buffer);
-				strftime (buffer,80,"Sun Set : %Y-%m-%d %H:%M:%S",&sunset_free);
-				puts(buffer);
-			}
-		}
-		else
-		{
-			R<<=1;
-			R|=3;
-			if (R||verb)
-			{
-				printf("Location: %.4f N %.4f E\n", 180*lat/M_PI, 180*lon/M_PI);
-				strftime (buffer,80,"Day: %Y-%m-%d",&ut);
-				puts(buffer);
-				if (r<0)
-					printf("freespa says it is a polar night\n");
-				else
-					printf("freespa says there is midnight sun\n");
-				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_nrel);
-				puts(buffer);
-				strftime (buffer,80,"Transit : %Y-%m-%d %H:%M:%S",&transit_free);
-				puts(buffer);
-			}
-		}
+			printf("Sunrise at %.3g degrees\n", rad2deg(P.az-M_PI/2));
+			R=1;
+		}		
 	}
 	return R;
 }
@@ -395,8 +355,11 @@ int main()
 	printf("freespa  used %f s (%.1f us/call)\n", NN, t, 1e6*t/NN);
 	t=Perf(NN, &SPA_Wrapper);
 	printf("NREL spa used %f s (%.1f us/call)\n", NN, t, 1e6*t/NN);
+	TimeTester(1395402298,-0.6832,-2.9471, 1);
+	TimeTester(1508838461,0.2944,-3.0712, 1);
 	
 	TIC(&t);
+	
 	for (i=0;i<N;i++)
 	{
 		if (RandomTimeTester())
