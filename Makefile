@@ -3,7 +3,7 @@ OBJ=freespa.o
 HDR=freespa.h freespa_tables.h freespa_dt_table.h
 CC=gcc
 #CFLAGS=-O3 -flto
-CFLAGS=-Og -Wall -pedantic -flto
+CFLAGS=-Og -Wall -pedantic -flto -g
 LFLAGS=-lm
 
 all: freespa.o check

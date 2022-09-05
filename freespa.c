@@ -1263,14 +1263,16 @@ int testjulian()
     char* timestr;
 #define JDEPS (1e-3/(24*60*60)) // 1 ms accuracy 
 	JulianDay D;
-	struct tm ut;
-	struct tm *p;
+	struct tm ut={0};
+	struct tm *p=NULL;
 	timestr=malloc(50*sizeof(char));
 	for (i=0;i<N;i++)
 	{
 		p=gmjtime_r(&dates[i], &ut);	
-		strftime(timestr, 50, "%Y-%m-%d %T %Z",p);
-		printf("testing %s", timestr);
+		if (strftime(timestr, 50, "%Y-%m-%d %T %Z",p)>0)
+			printf("testing %s", timestr);
+		else
+			fprintf(stderr,"Error: timestring exceeds 50 bytes\n");
 		D=MakeJulianDayEpoch(dates[i], 0,0);
 		printf("--> JD:%.1f\n", D.JD);
 		
