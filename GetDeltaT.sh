@@ -11,7 +11,7 @@
 #
 # The last entries in the deltat.data file are added to our 
 # historic reference
-# the predictions are adde3d beyin the last entry in our reference
+# the predictions are added beyond the last entry in our reference
 #
 # the reference is compiled from various IERS sources
 
@@ -19,17 +19,22 @@
 function deltatdata() {
 	year=$1
 	file=$2
-	# columns: year month ?? delta_t
+	# columns: year month day delta_t
 	awk "/^\s*[0-9]/{y=\$1+(\$2-1)/12+(\$3-1)/372;if(y>$year){print y,\$4}}" $file
 }
 
 function deltatpreds() {
 	year=$1
 	file=$2
-	# columns: year(decimal) delta_t acc
-	awk "/^\s*[0-9]/{if($year<\$1){print \$1,\$2}}" $file
+	# columns: MJD	          Year	TT-UT	UT1-UTC	Error 
+	awk "/^\s*[0-9]/{if($year<\$2){print \$2,\$3}}" $file
 }
 
+function historicupto() {
+	year=$1
+	file=$2
+	awk "/^\s*[0-9]/{if($year>\$1){print \$0}}" $file
+}
 
 # reference file:
 ref="historic_delta_t.dat"
@@ -59,8 +64,15 @@ else
 	exit 1
 fi
 mv deltat.preds future_delta_t.dat
-cat $ref > new_hist_delta_t.dat
-deltatdata $last "current_delta_t.dat" >> new_hist_delta_t.dat
+
+# let the current delta_t from maia.usno.navy.mil take presidence
+deltatdata 0 "current_delta_t.dat" > tmp.dat
+first=$(head -n 1 curr_t.dat |awk '{print $1}')
+rm tmp.dat
+historicupto $first $ref > new_hist_delta_t.dat
+deltatdata 0 "current_delta_t.dat" >> new_hist_delta_t.dat
+
+
 # after manual inspection you may rebase the reference file to this one
 prev=$last 
 last=$(tail -n 1 new_hist_delta_t.dat |awk '{print $1}')
@@ -70,7 +82,7 @@ cat new_hist_delta_t.dat >tmp.dat
 deltatpreds $last future_delta_t.dat >> tmp.dat
 
 N=$(wc -l tmp.dat|egrep -o [0-9]+)
-echo $N
+echo "new dt table length $N"
 echo "/* delta t table from iers data */" >freespa_dt_table_new.h
 echo "#define NDT $N" >>freespa_dt_table_new.h
 echo "const double freespa_delta_t_table[2*NDT] = {" >>freespa_dt_table_new.h
