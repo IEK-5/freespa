@@ -21,6 +21,9 @@ compare: $(SRC) $(HDR) $(OBJ) spa.c spa.h spa.o
 
 lst: freespa.o lst.c
 	$(CC) $(CFLAGS) -o lst lst.c $(OBJ) $(LFLAGS)
+	
+spa: freespa.o cli_spa.c
+	$(CC) $(CFLAGS) -o spa cli_spa.c $(OBJ) $(LFLAGS)
 
 freespa.o: $(HDR) freespa.c	
 clean:
