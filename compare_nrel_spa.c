@@ -82,6 +82,7 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 {
 	spa_data spa;
 	sol_pos P;
+	int r;
 	
 	
 	P.E=0;
@@ -92,6 +93,30 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 	spa.hour=ut->tm_hour;
 	spa.minute=ut->tm_min;
 	spa.second=(double)ut->tm_sec;
+	
+/* 
+ * Morrison, & Stephenson (2004) provide the following equation for Δt
+ * 
+ *                    2
+ *            ⎡y-1820⎤
+ * Δt(y) = 32 ⎢──────⎥  - 20
+ *            ⎣ 100  ⎦
+ * 
+ * However, for some reason NREL spa limits Δt to rather small values 
+ * (Δt<8000). This limits the validity of NREL spa to approximately the 
+ * years between 245 -- 3400. This is still a large range but 
+ * considerably smaller than the claimed -2000 -- 6000. 
+ * 
+ * If you use NREL spa, and need a broader range than 245 -- 3400, you 
+ * should remove the 8000 limit (see the "validate_inputs" routine). 
+ * 
+ * Morrison, L. V., & Stephenson, F. R. (2004). Historical Values of 
+ * the Earth’s Clock Error ΔT and the Calculation of Eclipses. 
+ * Journal for the History of Astronomy, 35(3), 327–336. 
+ * https://doi.org/10.1177/002182860403500305
+ * 
+ * Ps. freespa does not limit Δt, so knock your self out :)
+ */	
 	if (delta_t)
 		spa.delta_t=*delta_t;
 	else
@@ -108,6 +133,8 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
 	spa.function=SPA_ZA;
 	spa_calculate(&spa);
+	if (r)
+		fprintf(stderr,"NREL spa returned %d\n", r);
 	P.az=fmod(M_PI*spa.zenith/180,2*M_PI);
 	P.aa=fmod(M_PI*spa.azimuth/180, 2*M_PI);
 	P.a=P.aa;
@@ -115,11 +142,18 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 	P.z+=M_PI*spa.del_e/180;
 	return P;
 }
-//#define MIN_EPOCH -125197920000 // year -2000
-//#define MIN_EPOCH -125282592000 // year -2000
-//#define MAX_EPOCH 127090080000 // year +6000
-#define MIN_EPOCH 946681200 // year 2000
-#define MAX_EPOCH 1640991600 // year 2022
+
+#define MIN_EPOCH -125282592000 // year -2000
+#define MAX_EPOCH 127090080000 // year +6000
+
+//#define MIN_EPOCH -54277908808 // year ~250
+//#define MAX_EPOCH 45126500400 // year 3400
+
+//#define MIN_EPOCH -12000000000 // year ~250
+//#define MAX_EPOCH 45126500400 // year 3400
+
+//#define MIN_EPOCH 946681200 // year 2000
+//#define MAX_EPOCH 1640991600 // year 2022
 time_t RandEpoch()
 {
 	/* generate a random epoch between MIN_EPOCH and MAX_EPOCH
@@ -178,8 +212,7 @@ int SpecificTester(time_t tc, double lat, double lon, int verb)
 int RandomTester()
 {
 	time_t tc;
-	double lat, lon, d;
-	sol_pos P1, P2;
+	double lat, lon;
 	lat=RandLat();
 	lon=RandLon();
 	tc=RandEpoch();
@@ -188,7 +221,8 @@ int RandomTester()
 #define LAT 50.902996388
 #define LON 6.407165038
 #define N 10000 // number of coordinates to test
-#define NN 10000 // number of performancve test iterations
+#define NN 10000 // number of performance test iterations
+#define NNN 10000 // number of solar times to test
 // benchmark routine speed
 double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double *, double, double, double, double, double , double))
 {
@@ -218,7 +252,7 @@ double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double *, double, double,
 
 // simple wrapper around NREL's spa code
 int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1, 
-			double lon, double lat, double p, double T, 
+			double lon, double lat, double e, double p, double T, 
 			struct tm *sunrise, struct tm *transit, struct tm *sunset)
 {
 	spa_data spa;
@@ -238,7 +272,7 @@ int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 	spa.timezone=0;
 	spa.longitude=180.0*lon/M_PI;
 	spa.latitude=180.0*lat/M_PI;
-	spa.elevation=0;
+	spa.elevation=e;
 	spa.pressure=p;
 	spa.temperature=T;
 	spa.slope=0;
@@ -267,65 +301,115 @@ int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 	sunset=gmjtime_r(&t, sunset);
 	return 0;
 }
-#define TIMEEPS 60
+#define SUN_RADIUS 4.6542695162932789e-03 // in radians
+#define XEPS deg2rad(0.5) // in radians
+
+#define SRF 1	//sun rise freespa
+#define SSF 2	//sun set freespa
+#define STF 4	//sun transit freespa
+#define SRN 8	//sun rise NREL spa
+#define SSN 16	//sun set NREL spa
+#define STN 32	//sun transit NREL spa
+
 int TimeTester(time_t tc, double lat, double lon, int verb)
+/* tests whether sunset/sunrise/transit times are accurate
+ * Considers errors in radians, not seconds
+ * The errors are computed using the own solar position routines
+ * return value integer. bits 1&2: number of errors in freespa
+ *                       bits 3&4: number of errors in NREL spa
+ * 
+ * Note:  NREL's routines ignore elevation, freespa does not
+ *        we test at sea level.
+ * Note2: freespa does a more expensive optimization than NREL spa
+ *        and is generally more accurate.
+ */
 {
 	int R=0;
 	double dt;
-	char buffer [80];
+	sol_pos P;
+	double E1, E2;
 	struct tm ut;
 	struct tm *p;
 	struct tm sunset_nrel, sunrise_nrel, transit_nrel;
 	struct tm sunset_free, sunrise_free, transit_free;
-	time_t t1, t2;
 	
 	p=gmjtime_r(&tc, &ut);
 	dt=get_delta_t(p);
 	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
 		dt=0;
 	
-	R=SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
-	if (R)
-	{
-		sol_pos P;
-		double E;
-		SPA_SunTimes(ut, &dt, 0, lon, lat, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel);
-		P=SPA(&sunrise_free, &dt, 0, lon,  lat, 0, 1010, 10);
-		E=P.az-M_PI/2;
-		R=0;
-		if (fabs(E)>deg2rad(1))
-		{
-			printf("Sunrise at %.3g degrees\n", rad2deg(P.az-M_PI/2));
-			R=1;
-		}		
-	}
+	SunTimes(ut, &dt, 0, lon, lat, 0, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
+	SPA_SunTimes(ut, &dt, 0, lon, lat, 0, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel);
+	
+	// sunrise	
+	P=SPA(&sunrise_free, &dt, 0, lon,  lat, 0, 1010, 10);
+	E1=P.az-M_PI/2-SUN_RADIUS;
+	P=SPA_Wrapper(&sunrise_nrel, &dt, 0, lon,  lat, 0, 1010, 10);
+	E2=P.az-M_PI/2-SUN_RADIUS;
+	if (fabs(E1)>XEPS)
+		R|=SRF;
+	if (fabs(E2)>XEPS)
+		R|=SRN;
+	
+	//sunset
+	P=SPA(&sunset_free, &dt, 0, lon,  lat, 0, 1010, 10);
+	E1=P.az-M_PI/2-SUN_RADIUS;
+	P=SPA_Wrapper(&sunset_nrel, &dt, 0, lon,  lat, 0, 1010, 10);
+	E2=P.az-M_PI/2-SUN_RADIUS;
+	if (fabs(E1)>XEPS)
+		R|=SSF;
+	if (fabs(E2)>XEPS)
+		R|=SSN;
+	
+	//transit
+	P=SPA(&transit_free, &dt, 0, lon,  lat, 0, 1010, 10);
+	E1=atan(sin(P.aa)*fabs(tan(P.az)));
+	P=SPA_Wrapper(&transit_nrel, &dt, 0, lon,  lat, 0, 1010, 10);
+	E2=atan(sin(P.aa)*fabs(tan(P.az)));
+	if (fabs(E1)>XEPS)
+		R|=STF;
+	if (fabs(E2)>XEPS)
+		R|=STN;
+	
 	return R;
 }
+
+
+/* minimum and maximum latitudes
+ * Computing sunrise/set times is hard near the poles where the
+ * sub may cross the horizon at a very shallow angle (or not at all)
+ * For this reason we limit the range a bit
+ */
+
+#define MAXLAT 65
+#define MINLAT 65
 
 int RandomTimeTester()
 {
 	time_t tc;
-	double lat, lon, d;
-	sol_pos P1, P2;
-	lat=RandLat();
+	double lat, lon;
+	lat=deg2rad(MINLAT+(MAXLAT-MINLAT)*((double)rand()/(double)(RAND_MAX)));
 	lon=RandLon();
 	tc=RandEpoch();
 	return TimeTester(tc, lat, lon,0);
 }
 int main()
 {
-	sol_pos P1, P2;
-	spa_data spa;
-	double t, e, dt, sr, ss, tr, h, m, s;
+	double t;
 	time_t tc;
 	char *curtz = getenv("TZ"); // Make a copy of the timezone variable
 	char *old=NULL;
-	int sum=0,i;
+	int i, r;
 	int NE=0;
-	struct tm ut={}, *p;
+	int SREF=0;
+	int SSEF=0;
+	int STEF=0;
+	int SREN=0;
+	int SSEN=0;
+	int STEN=0;
+	struct tm ut={0}, *p;
 	tc=1652254722;
 	p=gmjtime_r(&tc, &ut);
-	dt=get_delta_t(p);
 	
 	if (curtz)
 		old=strdup(curtz);
@@ -335,11 +419,12 @@ int main()
 	
 	
 	srand((unsigned) time(&tc));
-	printf("Testing freespa against NREL spa for %d random inputs\n", N);
+	printf("---------------------------------\n");
+	printf("Testing freespa against NREL spa for %d random inputs:\n", N);
 	TIC(&t);
 	for (i=0;i<N;i++)
 	{
-		if (RandomTester())
+		if ((RandomTester()))
 		{
 			fprintf(stderr,"Error: the spa's do not match!\n");
 			NE++;
@@ -349,28 +434,43 @@ int main()
 	printf("%d errors\n", NE);
 	t=TOC(&t);
 	printf("used %f s (%.1f us/test)\n", t, 1e6*t/N);
+	printf("---------------------------------\n\n");
 	
-	printf("Benchmarking the spa's\n", N);
+	printf("---------------------------------\n");
+	printf("Benchmarking the spa's\n");
 	t=Perf(NN, &SPA);
-	printf("freespa  used %f s (%.1f us/call)\n", NN, t, 1e6*t/NN);
+	printf("freespa  used %f s (%.1f us/call)\n", t, 1e6*t/NN);
 	t=Perf(NN, &SPA_Wrapper);
-	printf("NREL spa used %f s (%.1f us/call)\n", NN, t, 1e6*t/NN);
-	TimeTester(1395402298,-0.6832,-2.9471, 1);
-	TimeTester(1508838461,0.2944,-3.0712, 1);
-	
+	printf("NREL spa used %f s (%.1f us/call)\n", t, 1e6*t/NN);
+	printf("---------------------------------\n\n");
+	// TimeTester(1395402298,-0.6832,-2.9471, 1);
+	// TimeTester(1508838461,0.2944,-3.0712, 1);
+	printf("---------------------------------\n");
+	printf("testing sunrise/transit/set times\n");
 	TIC(&t);
 	
-	for (i=0;i<N;i++)
+	for (i=0;i<NNN;i++)
 	{
-		if (RandomTimeTester())
+		if (r=RandomTimeTester())
 		{
-			fprintf(stderr,"Error: the spa's do not match!\n");
-			NE++;
+			SREF+=((r&SRF)>0);
+			SSEF+=((r&SSF)>0);
+			STEF+=((r&STF)>0);
+			SREN+=((r&SRN)>0);
+			SSEN+=((r&SSN)>0);
+			STEN+=((r&STN)>0);
 		}
 	}
 	printf("tested %d coodinates and times\n", N);
-	printf("%d errors\n", NE);
+	printf("freespa:  %d sun-rise errors\n", SREF);
+	printf("freespa:  %d sun-set errors\n", SSEF);
+	printf("freespa:  %d transit errors\n", STEF);
+	printf("NREL spa: %d sun-rise errors\n", SREN);
+	printf("NREL spa: %d sun-set errors\n", SSEN);
+	printf("NREL spa: %d transit errors\n", STEN);
 	t=TOC(&t);
+	printf("---------------------------------\n\n");
+	
     if (old)
     {
 		printf("%s\n", old);

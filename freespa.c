@@ -101,8 +101,25 @@ typedef struct GeoCentricSolPos {
  * Inc., Richmond, Virginia, USA.
  * Pages 59-66
  */
-/* extrapolate delta t  (Morrison & Stephenson, 2004) */
+ 
+ 
+/* extrapolate Δt
+ * Morrison, & Stephenson provide the following equation for Δt
+ * 
+ *                    2
+ *            ⎡y-1820⎤
+ * Δt(y) = 32 ⎢──────⎥  - 20
+ *            ⎣ 100  ⎦
+ * 
+ * where y is the year, and Δt is in seconds.
+ * 
+ * Morrison, L. V., & Stephenson, F. R. (2004). Historical Values of 
+ * the Earth’s Clock Error ΔT and the Calculation of Eclipses. 
+ * Journal for the History of Astronomy, 35(3), 327–336. 
+ * https://doi.org/10.1177/002182860403500305
+ */
 #define DELATTEXTRAP(y) (32.0*(((y)-1820.0)/100)*(((y)-1820.0)/100)-20)
+
 /* interpolate delta t */
 double get_delta_t(struct tm *ut)
 {
@@ -132,8 +149,7 @@ JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 {
 	int month, year;
 	double day, a, dt;
-	JulianDay JD;
-	
+	JulianDay JD={0};
 	JD.E=0;
 	day = (double)ut->tm_mday + ((double)ut->tm_hour+((double)ut->tm_min+((double)ut->tm_sec+delta_ut1)/60.0)/60.0)/24;
 	month=ut->tm_mon+1;
@@ -161,13 +177,12 @@ JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 	return JD;
 }
 
-JulianDay AddDays(JulianDay JD, int Ndays)
+JulianDay AddDays(JulianDay JD, double Ndays)
 {
-	double d=(double)Ndays;
-	JD.JD+=d;
-	JD.JDE+=d; // assume delta t does not change!
-	JD.JC+=d/36525.0;
-	JD.JCE+=d/36525.0;
+	JD.JD+=Ndays;
+	JD.JDE+=Ndays; // assume delta t does not change much from day to day
+	JD.JC+=Ndays/36525.0;
+	JD.JCE+=Ndays/36525.0;
 	JD.JME=JD.JCE/10;
 	return JD;
 }
@@ -461,7 +476,7 @@ static inline double iBennet(double p, double T, double h)
 // some more polynomials
 const double ECLIPTIC_MEAN_OBLIQUITY[] = {2.45,5.79,27.87,7.12,-39.05,-249.67,-51.38,1999.25,-1.55,-4680.93,84381.448};
 const double GSTA[] = {deg2rad(-1/38710000.0),deg2rad(0.000387933),0.0,deg2rad(280.46061837)};
-sol_pos solpos(sol_pos P, double lon, double lat, double e, double p, double T, JulianDay JD, GeoCentricSolPos GP)
+sol_pos solpos(double lon, double lat, double e, double p, double T, JulianDay JD, GeoCentricSolPos GP)
 {
 	double dtau, v, H, u, x, y;
 	double lambda, alpha, delta, xi;
@@ -469,6 +484,7 @@ sol_pos solpos(sol_pos P, double lon, double lat, double e, double p, double T, 
 	//double aplpha_prime;
 	double dpsi, deps, eps, dalpha;
 	double h, dh=0, a_refr;
+	sol_pos P;
 	
 	// aberation correction
 	dtau=deg2rad(-20.4898/3600.0)/GP.rad;
@@ -494,7 +510,7 @@ sol_pos solpos(sol_pos P, double lon, double lat, double e, double p, double T, 
 	
 	// hour angle
 	H=v+lon-alpha; 
-		
+	
 	// equatorial horizontal parallax of the sun
 	xi=deg2rad(8.794/3600.0)/GP.rad;
 	// term u
@@ -647,13 +663,14 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 	if (!P.E)
 	{
 		D=MakeJulianDay(ut, delta_t, delta_ut1);
+		
 		if (D.E)
 		{
 			P.E=D.E;
 			return P;
 		}
 		G=Geocentric_pos(D);
-		P=solpos(P,lon,lat,e,p,T,D,G);
+		P=solpos(lon,lat,e,p,T,D,G);
 	}
 	return P;
 }
@@ -694,9 +711,9 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double
  * solution. Routine ignores observer elevation and does not verify its 
  * results (i.e. the error is not evaluated).
  * 
- * freesdpa uses this routine for a first solution and use iterative 
+ * freespa uses this routine for a first solution and use iterative 
  * solvers to refine the solution further, if needed. This way freespa
- * corrects for observer elevation.
+ * corrects for observer elevation and is generally more accurate.
  * 
  * input: 
  *  - ut			time struct with UTC. Only used for the date (year, 
@@ -724,8 +741,8 @@ double ablim(double a)
 // weird to limit these deltas to 1/2 degrees, or?
 //#define ALIM 2*M_PI
 //#define AALIM M_PI
-#define ALIM deg2rad(2)
-#define AALIM deg2rad(1)
+#define ALIM deg2rad(10)
+#define AALIM deg2rad(5)
 	if (fabs(a)>ALIM)
 	{
 		if (a<0)
@@ -794,7 +811,7 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 	// test if we have a regular sunrise/sunset
 	if ((arg>-1) && (arg<1))
 	{
-		// approximate sun rise and set timnes in radians
+		// approximate sun rise and set times in radians
 		H=fmod(acos((sin(a_refr)-sin(lat)*sin(delta[1]))/(cos(lat)*cos(delta[1]))), M_PI);
 		m[1]=m[0]-H;
 		m[2]=m[0]+H;
@@ -834,7 +851,7 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 		Day[2].JD+=m[2]+(h[2]-a_refr)/2/M_PI/cos(deltap[2])/cos(lat)/sin(Hp[2]);
 		
 		// noon is computed for the given date
-		// sunrise must be before that time and unset after
+		// sunrise must be before that time and sunset after
 		if (Day[0].JD>Day[1].JD)
 			Day[0].JD-=1.0;
 		if (Day[1].JD>Day[2].JD)
@@ -874,7 +891,7 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 			Hp[0]-=2*M_PI;
 		h[0]=asin(sin(lat)*sin(deltap[0])+cos(lat)*cos(deltap[0])*cos(Hp[0]));			
 		
-		// only the transit timne is valid
+		// only the transit time is valid
 		// the sunrise and sunset times are set as min/max bounds
 		// to aid iterative refinement 
 		Day[1].JD+=m[0]-Hp[0]/2/M_PI;
@@ -898,7 +915,7 @@ double SunRiseSetErr(time_t t, double *delta_t, double delta_ut1, double lon, do
 {
 	sol_pos P;
 	struct tm ut={0}, *put;
-	put=gmtime_r(&t, &ut);
+	put=gmjtime_r(&t, &ut);
 	P=SPA(put, delta_t, delta_ut1, lon, lat, e, p, T);
 	return P.az-M_PI/2-SUN_RADIUS;
 }
@@ -907,7 +924,7 @@ double SunTransitErr(time_t t, double *delta_t, double delta_ut1, double lon, do
 {
 	sol_pos P;
 	struct tm ut={0}, *put;
-	put=gmtime_r(&t, &ut);
+	put=gmjtime_r(&t, &ut);
 	P=SPA(put, delta_t, delta_ut1, lon, lat, e, p, T);
 	return atan(sin(P.aa)*fabs(tan(P.az))); // angle with the plane x=0;
 }
@@ -950,7 +967,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 		}
 		if (Emax>0)
 		{
-			//printf("sunsise non bracketet tmax\n");
+			//printf("sunrise non bracketet tmax\n");
 			(*Err)=1;
 			return to;
 		}
@@ -983,6 +1000,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 	}
 	
 	E=Eo;
+	t=(tmax+tmin)/2;
 	while ((fabs(E)>eps)&&(tmax-tmin>1))
 	{
 		E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
@@ -1213,7 +1231,7 @@ time_t BisectTransit(struct tm *sunrise, struct tm *transit,struct tm *sunset, d
  *  1				Midnight sun. Only transit is computed.
  *  10				Don't trust the results
  */ 
-#define ST_EPS deg2rad(0.1)	// do not make it too small, accurate predictions are not possible anyway.
+#define ST_EPS deg2rad(0.05)	// do not make it too small, accurate predictions are not possible anyway.
 int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
 {
 	time_t t;
@@ -1222,12 +1240,12 @@ int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double
 	r=SunTimes_nrel(ut, delta_t, delta_ut1, lon, lat, p, T, sunrise, transit, sunset);
 	/* currently I ignore errors when the root is not bracketet.
 	 * My tests show it always is at large latitudes/ polar night/midnight sun kind of 
-	 * conditions where accurate ansewers are not possible
+	 * conditions where accurate answers are not possible
 	 */
 	
 	if (r==0)
 	{
-		t=BisectSunRise(sunrise, transit, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
+		t=BisectSunRise(sunrise, transit, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);		
 		gmjtime_r(&t,sunrise);
 		t=BisectSunSet(sunset, transit, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
 		gmjtime_r(&t,sunset);

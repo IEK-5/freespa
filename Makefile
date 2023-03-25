@@ -2,9 +2,16 @@ SRC=freespa.c testspa.c
 OBJ=freespa.o
 HDR=freespa.h freespa_tables.h freespa_dt_table.h
 CC=gcc
-#CFLAGS=-O3 -flto
-CFLAGS=-Og -Wall -pedantic -flto -g
+CFLAGS=-O3 -flto
+# CFLAGS=-Og -Wall -pedantic -flto -g
 LFLAGS=-lm
+ifneq ("$(wildcard spa.c)","")
+	ifneq ("$(wildcard spa.h)","")
+		NRELSPA = -DNRELSPA
+		OBJ:=$(OBJ) spa.o
+	endif
+endif
+$(info $$NRELSPA is [${NRELSPA}])
 
 all: freespa.o check
 distdir:
@@ -16,14 +23,14 @@ test: $(SRC) $(HDR) $(OBJ) testspa.c testtime.c
 	$(CC) $(CFLAGS) -o testspa testspa.c $(OBJ) $(LFLAGS)
 	$(CC) $(CFLAGS) -o testtime testtime.c $(OBJ) $(LFLAGS)
 
-compare: $(SRC) $(HDR) $(OBJ) spa.c spa.h spa.o
-	$(CC) $(CFLAGS) -o comparespa compare_nrel_spa.c $(OBJ) spa.o $(LFLAGS)
+compare: $(SRC) $(HDR) $(OBJ) spa.c spa.h
+	$(CC) $(CFLAGS) -o comparespa compare_nrel_spa.c $(OBJ) $(LFLAGS)
 
 lst: freespa.o lst.c
 	$(CC) $(CFLAGS) -o lst lst.c $(OBJ) $(LFLAGS)
 	
-spa: freespa.o cli_spa.c
-	$(CC) $(CFLAGS) -o spa cli_spa.c $(OBJ) $(LFLAGS)
+spa: freespa.o cli_spa.c $(OBJ)
+	$(CC) $(CFLAGS) -o spa $(NRELSPA) cli_spa.c $(OBJ) $(LFLAGS)
 
 freespa.o: $(HDR) freespa.c	
 clean:
