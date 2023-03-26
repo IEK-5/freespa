@@ -52,8 +52,6 @@
  * NREL does not allow free distribution of its SPA implementation
  * 
  * By enabling NREL spa you can compare the two implementations.
- * However, it only affects the calculation of the solar position and
- * currently does *NOT* affect sun rise/transit/set times
  */
 #include "spa.h"
 
@@ -111,6 +109,65 @@ sol_pos NREL_SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 	P.z=P.az;
 	P.z+=M_PI*spa.del_e/180;
 	return P;
+}
+
+// simple wrapper around NREL's spa code
+int NREL_SunTimes(struct tm ut, double *delta_t, double delta_ut1, 
+			double lon, double lat, double e, double p, double T, 
+			struct tm *sunrise, struct tm *transit, struct tm *sunset)
+{
+	spa_data spa;
+	time_t t, t0, tt;	
+	
+	spa.year=ut.tm_year+1900;
+	spa.month=ut.tm_mon+1;
+	spa.day=ut.tm_mday;
+	spa.hour=ut.tm_hour;
+	spa.minute=ut.tm_min;
+	spa.second=(double)ut.tm_sec;
+	if (delta_t)
+		spa.delta_t=*delta_t;
+	else
+		spa.delta_t=get_delta_t(&ut);
+	spa.delta_ut1=delta_ut1;
+	spa.timezone=0;
+	spa.longitude=180.0*lon/M_PI;
+	spa.latitude=180.0*lat/M_PI;
+	spa.elevation=e;
+	spa.pressure=p;
+	spa.temperature=T;
+	spa.slope=0;
+	spa.azm_rotation=0;
+	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
+	spa.function=SPA_ZA_RTS;
+	spa_calculate(&spa);
+	if ((spa.sunrise<0)||(spa.sunset<0)||(spa.suntransit<0))
+	{
+		if ((spa.latitude<67.9)&&(spa.latitude>-67.9))
+			return 10;
+		if (spa.zenith<90)
+			return 1;		
+		return -1;
+	}
+	
+	ut.tm_hour=0;
+	ut.tm_min=0;
+	ut.tm_sec=0;
+	t0=mkgmjtime(&ut);
+	
+	tt=t0+(time_t)(3600*spa.suntransit);
+	transit=gmjtime_r(&tt, transit);
+	
+	t=t0+(time_t)(3600*spa.sunrise);
+	if (t>tt)
+		t-=86400;
+	sunrise=gmjtime_r(&t, sunrise);
+	t=t0+(time_t)(3600*spa.sunset);
+	if (t<tt)
+		t+=86400;
+	sunset=gmjtime_r(&t, sunset);
+	// TODO match freespa return value
+	return 0;
 }
 #endif
 
@@ -266,7 +323,7 @@ int main(int argc, char **argv)
 							break;
 						case 'N':
 							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
-							printf("\t  Use NREL spa instead of freespa (solar position only)\n\n");
+							printf("\t  Use NREL spa instead of freespa\n\n");
 							break;
 						case 'h':
 							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
@@ -330,7 +387,12 @@ int main(int argc, char **argv)
 	printf("true    azimuth:\t%10f °\n", rad2deg(P.a));
 	printf("------------------------------------\n\n");
 	
-	r=SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+	if (fspa==1)
+		r=SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+#ifdef NRELSPA
+	else
+		r=NREL_SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+#endif
 	
 	if (v>0)
 	{
@@ -357,10 +419,16 @@ int main(int argc, char **argv)
 			else
 				printf("midnight sun\n");
 			
-			P=SPA(&transit, NULL, 0, lon,  lat, 0, Pr, Temp);
-			Etr=atan(sin(P.aa)*fabs(tan(P.az)));
-			strftime (buffer,80,"Transit:\t %Y-%m-%d %H:%M:%S",&transit);
-			printf("%s\n\t\t   (error %6.4f °)\n", buffer, rad2deg(Etr));
+			if (fspa==1)
+			{
+				P=SPA(&transit, NULL, 0, lon,  lat, 0, Pr, Temp);
+				Etr=atan(sin(P.aa)*fabs(tan(P.az)));
+				strftime (buffer,80,"Transit:\t %Y-%m-%d %H:%M:%S",&transit);
+				printf("%s\n\t\t   (error %6.4f °)\n", buffer, rad2deg(Etr));
+			}
+			else
+				printf("NREL spa only computes transit if \nthe sun rises and sets\n");
+			
 		}
 		printf("------------------------------------\n\n");
 	}

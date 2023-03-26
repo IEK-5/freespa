@@ -281,7 +281,13 @@ int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 	spa.function=SPA_ZA_RTS;
 	spa_calculate(&spa);
 	if ((spa.sunrise<0)||(spa.sunset<0)||(spa.suntransit<0))
-		return 1;
+	{
+		if ((spa.latitude<67.9)&&(spa.latitude>-67.9))
+			return 10;
+		if (spa.zenith<90)
+			return 1;		
+		return -1;
+	}
 	
 	ut.tm_hour=0;
 	ut.tm_min=0;
@@ -299,6 +305,7 @@ int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 	if (t<tt)
 		t+=86400;
 	sunset=gmjtime_r(&t, sunset);
+	// TODO match freespa return value
 	return 0;
 }
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
