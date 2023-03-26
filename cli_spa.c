@@ -182,9 +182,10 @@ int main(int argc, char **argv)
 	double E=96.0, Pr=1010, Temp=10;
 	// use default freespa
 	int fspa=1;	
+	// what to compute/show
+	int tsoltime=0, solpos=1, suntimes=0;	
 	// per default we use the current time
 	time_t tc=time(NULL);
-	int v=0;
 	int r;
 	
 	struct tm sunrise={0}, sunset={0}, transit={0};
@@ -204,13 +205,15 @@ int main(int argc, char **argv)
 			{"pressure",    required_argument, 0, 'p'},
 			{"temperature", required_argument, 0, 'T'},
 			{"time",        required_argument, 0, 't'},
-			{"verbose",           no_argument, 0, 'v'},
+			{"soltime",           no_argument, 0, 's'},
+			{"solpos",            no_argument, 0, 'S'},
+			{"suntimes",          no_argument, 0, 'r'},
 			{"nrel",              no_argument, 0, 'N'},
 			{"help",              no_argument, 0, 'h'},
 			{0, 0, 0, 0}
 		};
 		int option_index = 0;
-		c = getopt_long (argc, argv, "c:e:p:T:t:vNh",long_options, &option_index);
+		c = getopt_long (argc, argv, "c:e:p:T:t:sSrNh",long_options, &option_index);
 		if (c == -1)
 			break;
 			
@@ -270,8 +273,14 @@ int main(int argc, char **argv)
 				}
 				tc=atol(optarg);
 				break;
-			case 'v':
-				v++;
+			case 's':
+				tsoltime=(!tsoltime);
+				break;
+			case 'S':
+				solpos=(!solpos);
+				break;
+			case 'r':
+				suntimes=(!suntimes);
 				break;
 			case 'N':
 #ifdef NRELSPA
@@ -296,11 +305,6 @@ int main(int argc, char **argv)
 				{
 					switch (long_options[i].val)
 					{
-						case 'v':
-							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
-							printf("\t\t  [-vv] (extra verbose)\n");
-							printf("\t  Make output more verbose\n\n");
-							break;
 						case 'c':
 							printf("\t--%s [-%c] <latitude>,<longitude>\n", long_options[i].name, (char)long_options[i].val);
 							printf("\t  Default Coordinate: 50.90329,6.41143\n\n");
@@ -320,6 +324,18 @@ int main(int argc, char **argv)
 						case 't':
 							printf("\t--%s [-%c] <time>\n", long_options[i].name, (char)long_options[i].val);
 							printf("\t  Default Time: current unix time (%ld)\n\n", tc);
+							break;
+						case 's':
+							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
+							printf("\t  toggle printing the true solar time (default false)\n\n");
+							break;
+						case 'S':
+							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
+							printf("\t  toggle printing the solar position (default true)\n\n");
+							break;
+						case 'r':
+							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
+							printf("\t  toggle printing the sun-rise, set, and transit times (default false)\n\n");
 							break;
 						case 'N':
 							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
@@ -348,28 +364,7 @@ int main(int argc, char **argv)
 	}
 	
 	p=gmjtime_r(&tc, &ut);
-	if (v>1)
-	{
-		printf("| Input ----------------------------\n");
-		printf("Coordinate:\t  %8.4f,%-8.4f°\n",rad2deg(lat),rad2deg(lon));
-		printf("Elevation: \t\t%10.2f m\n",E);
-		printf("Pressure:\t     %10.2f mbar\n",Pr);
-		printf("Temperature:\t       %10.2f °C\n",Temp);
-		if (fspa==1)
-			printf("Implementation:              freespa\n");
-		else
-			printf("Implementation:             NREL spa\n");
-		printf("------------------------------------\n\n");
-	}
-	
-	if (fspa==1)
-		P=SPA(p, NULL, 0, lon,  lat, E, Pr, Temp);
-#ifdef NRELSPA
-	else
-		P=NREL_SPA(p, NULL, 0, lon,  lat, E, Pr, Temp);
-#endif
-	
-	if (v>0)
+	if (tsoltime)
 	{
 		printf("| Time -----------------------------\n");
 		strftime (buffer,80,"UTC:\t\t%Y-%m-%d %H:%M:%S",&ut);
@@ -380,22 +375,30 @@ int main(int argc, char **argv)
 		printf("------------------------------------\n\n");
 	}
 	
-	printf("| Solar Position -------------------\n");
-	printf("aparent zenith: \t%10f °\n", rad2deg(P.az));
-	printf("aparent azimuth:\t%10f °\n", rad2deg(P.aa));
-	printf("true    zenith: \t%10f °\n", rad2deg(P.z));
-	printf("true    azimuth:\t%10f °\n", rad2deg(P.a));
-	printf("------------------------------------\n\n");
-	
-	if (fspa==1)
-		r=SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+	if (solpos)
+	{
+		if (fspa==1)
+			P=SPA(p, NULL, 0, lon,  lat, E, Pr, Temp);
 #ifdef NRELSPA
-	else
-		r=NREL_SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+		else
+			P=NREL_SPA(p, NULL, 0, lon,  lat, E, Pr, Temp);
+#endif
+		printf("| Solar Position -------------------\n");
+		printf("aparent zenith: \t%10f °\n", rad2deg(P.az));
+		printf("aparent azimuth:\t%10f °\n", rad2deg(P.aa));
+		printf("true    zenith: \t%10f °\n", rad2deg(P.z));
+		printf("true    azimuth:\t%10f °\n", rad2deg(P.a));
+		printf("------------------------------------\n\n");
+	}
+	if (suntimes)
+	{
+		if (fspa==1)
+			r=SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+#ifdef NRELSPA
+		else
+			r=NREL_SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
 #endif
 	
-	if (v>0)
-	{
 		printf("| Sunrise and Sunset----------------\n");
 		if (r==0)
 		{
