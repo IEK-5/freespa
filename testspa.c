@@ -78,7 +78,23 @@ double RandLat()
 {
 	return M_PI*((double)rand()/(double)(RAND_MAX))-M_PI/2;
 } 
-
+ 
+double RandE()
+{
+	return 8400*((double)rand()/(double)(RAND_MAX))-400;
+} 
+double Randp()
+{
+	/* sea level records:
+	 * 870
+	 * 1085
+	 */
+	return 250*((double)rand()/(double)(RAND_MAX))-850;
+} 
+double RandT()
+{
+	return 40*((double)rand()/(double)(RAND_MAX))-10;
+} 
 int LogSPA(char *fn, int N)
 {
 	sol_pos P;
@@ -87,7 +103,7 @@ int LogSPA(char *fn, int N)
 	struct tm ut, *p;
 	FILE *f;
 	time_t tc;
-	double lat, lon;
+	double lat, lon, e, pp, T;
 	
 	if ((f=fopen(fn,"w"))==NULL)
 	{
@@ -101,11 +117,14 @@ int LogSPA(char *fn, int N)
 		lat=RandLat();
 		lon=RandLon();
 		tc=RandEpoch();
+		e=RandE();
+		pp=Randp();
+		T=RandT();
 		p=gmtime_r(&tc, &ut);
 		if (p)
 		{
-			P=SPA(p, 0, 0, lon,  lat, 0, 1010, 10);
-			fprintf(f,"%16ld\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\n", tc, lat,lon,P.a,P.z,P.aa, P.az);
+			P=SPA(p, 0, 0, lon,  lat, E, pp, T);
+			fprintf(f,"%16ld\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\n", tc, lat,lon,e, pp, T, P.a,P.z,P.aa, P.az);
 		}
 		else
 		{
@@ -143,7 +162,7 @@ int TestSPA(char *fn)
 	struct tm ut, *p;
 	FILE *f;
 	time_t tc;
-	double lat, lon, d;
+	double lat, lon, d, e, pp, T;
 	char *timestr;
 	timestr=malloc(50*sizeof(char));
 	
@@ -159,14 +178,14 @@ int TestSPA(char *fn)
 			break;
 		if (line[0]=='#')
 			continue;
-		i=sscanf(line,"%ld %lf %lf %lf %lf %lf %lf", &tc, &lat, &lon, &Pr.a, &Pr.z, &Pr.aa, &Pr.az);
+		i=sscanf(line,"%ld %lf %lf %lf %lf %lf %lf %lf %lf %lf", &tc, &lat, &lon, &e, &pp, &T, &Pr.a, &Pr.z, &Pr.aa, &Pr.az);
 		if (i==7)
 		{
 			p=gmtime_r(&tc, &ut);
 			if (p)
 			{
 				j++;
-				P=SPA(p, NULL, 0, lon,  lat, 0, 1010, 10);		
+				P=SPA(p, NULL, 0, lon,  lat, e, pp, T);		
 				d=AngleBetween(P.az, P.aa, Pr.az, Pr.aa);
 				if (fabs(d)>RAD_EPS)
 				{

@@ -1,25 +1,9 @@
 # freespa
 ## About freespa
-This is a free implementation in c of the Solar Position Algorithm (SPA) [1-2]. Another open and free c implementation is provided by NREL [here](http://rredc.nrel.gov/solar/codesandalgorithms/spa/). NREL's SPA is free as in beer. However, it's beer which you are not allowed to share with your friends. You are free to share freespa under the conditions of the [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html). 
+This is a free implementation in c of the Solar Position Algorithm (SPA) [1-2]. Another open and free c implementation is provided by NREL [here](https://midcdmz.nrel.gov/spa/). NREL's SPA is free as in beer! However, it's like beer which you are not allowed to share with your friends (the License does not allow redistribution). The freespa code, on the other hand, you may share under the conditions of the [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html). 
 
 ## Installation
-Package is not designed to be installed but rather to be inserted in a project. You can add freespa as a submodule to your code, the provided Makefile is designed for this purpose. 
-
-For debugging purposes I also provide code to comapre freespa with NREL SPA, however, to compile that you need to obtain your own copy of [NREL SPA](http://rredc.nrel.gov/solar/codesandalgorithms/spa/). A test program is also provided which should generally suffice for testing the correctness of the algorithm (i.e. you do not need NREL SPA to verify freespa). To run the tests do 
-
-`make check`
-
-This will build a test program, "testspa", and checks the correct functioning with it. Tests include a comparison with a reference data set with time/location/solar position. The testspa program usage:
-
-`testpa [r/t] \<filename\>`
-
-In general one should only use the "t" option with the provided reference file. You may, however use it to generate a new reference file with the "r" option. 
-
-A reference file contains lines whiche each line whould consist of:
-
-`unix-timestamp latitude longitude true-azimuth true-zenith aparent-azimuth aparent-zenith`,
-
-where all angles and coordinates are in radians.
+Package is not designed to be installed but rather to be inserted in a project. You can add freespa as a submodule to your code.
 
 ## Usage
 The main routine is: 
@@ -50,24 +34,67 @@ The return value consists of a data struct:
 
 If the error flag equals 0 all is OK. The double values are the true zenith and azimuth angles (z,a), and the aparant zenith and azimuth (az,aa), including atmospheric refraction effects. All angles are again in radians. 
 
-## Delta t
-For accurate timing the SPA algorithm needs delta t values. Both historic and predicted future values may be obtained here:
+In addition freespa defines several other routines:
+
+ - `struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double lon, double lat)`
+	- Computes the true solar time for a given coordinate and time struct with UTC time
+ - `int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, struct tm *sunrise, struct tm, *transit, struct tm *sunset)`
+	- Computes sunrise, transit, and sunset times
+
+As the implemented SPA routine is accurate over a long period of time, it is useful to extend the unix time concept a bit. To this end freespa reimplements the gmtime and mkgmtime equivalent routines. The freespa routines should, for the present time, be equivalent to the standard routines in time.h. However, freespa's routines consider the 10-day gap between the Julian and Gregorian calendar where the Julian calendar ends on October 4, 1582 (JD = 2299160), and the next day the Gregorian calendar starts on October 15, 1582. The impemented routines are:
+
+ - `struct tm *gmjtime_r(time_t *t, struct tm *ut)`
+	- converts unix time to a time struct with UTC (thread safe)
+ - `struct tm *gmjtime(time_t *t)`
+	- converts unix time to a time struct with UTC (not thread safe)
+ - `time_t mkgmjtime(struct tm *ut)`
+	- converts a time struct with UTC to unix time
+
+## Δt
+For accurate timing the SPA algorithm needs Δt values. Both historic and predicted future values may be obtained here:
 [https://maia.usno.navy.mil/ser7/](https://maia.usno.navy.mil/ser7/)
 
-Another source of delta t values is
+Another source of Δt values is
 
 [https://hpiers.obspm.fr/eop-pc/index.php?index=analysis&lang=en](https://hpiers.obspm.fr/eop-pc/index.php?index=analysis&lang=en)
 
-This database provides delta t values over various time ranges in various resolutions.
+This database provides Δt values over various time ranges in various resolutions.
 
-Using these datasources we compiled a table of delta t tables in the file historic_delta_t.dat. The script "GetDeltaT.sh" takes this data and combines it with updated measured and predicted data from
+Using these datasources we compiled a table of Δt values in freespa_dt_table.h. Beyond the values in the table we use long term predictions of Δt according to the empirical model from Morrison and  Stephenson [4]. It is possible to update the tables in freespa_dt_table.h. To this end the "GetDeltaT.sh" script is provided, which generates a new header "freespa_dt_table_new.h", which can be inspected and included if correct. The script downloads new  Δt values and mid-term predictions from [https://maia.usno.navy.mil/ser7/](https://maia.usno.navy.mil/ser7/).
 
-[https://maia.usno.navy.mil/ser7/](https://maia.usno.navy.mil/ser7/)
+## Differences w.r.t. NREL's SPA
+In general freespa and NREL's SPA produce identical results. In some small details there are differences stemming from slightly different choises. Note that some of the behavior of NREL's SPA discussed here is only documented only in the spa.c source code provided by NREL [3].
+ 
+To save the caller the burden to find appropriate Δt values, freespa includes both tabular historic Δt data and extrapolation routines. However, the user may still provide own Δt data. Here it should also be noted that Δt in NREL's SPA is limited to to the range -8000 -- 8000 s, whereas freespa imposes no limit (accepts any double float value). I found no reference nor rationale behind this seemingly arbitrary limit in NREL's SPA. However, using the historic data and long term Δt predictions from Morrison and  Stephenson, [4], it follows that Δt<8000 only holds for the approximate period 245 -- 3400, much shorter than the claimed validity for the period -2000 -- 6000 [1-2]. 
 
-The result is collected in freespa_dt_table_new.h. This new header file may be used to replace the freespa_dt_table.h header.
+Both NREL's SPA and freespa can compute sunrise, transit, and sunset. Here we find that freespa is more accurate, or at least self consistent. Assuming the SPA algorithm itself is accurate, we can test the accuracy of the computed  sunrise, transit, and sunset by computing the solar position at those particular times. For sunrise and sunset the top of the solar disk should touch the horizon, and for the solar transit the sun should be north or south, depending on the latitude and time of year. By randomly generating coordinates and times we can statistically tested the accuracy of the computed  sunrise, transit, and sunset times. Within the latitudes -65 -- 65, freespa is always within 0.05° accurate, whereas NREL's SPA is only accurate to about 1°. The improved accuracy of freespa is achieved by iteratively improving an initial solution. The initial solution of freespa is more or less identical to NREL's algorithm [5].
+
+## Testing
+To test the correct functioning of freespa you may use 
+
+`make check`
+
+which will run various checks and report back.
+
+A simple commandline interfece to freespa may be compiled with
+
+`make spa`
+
+In case you download [NREL's SPA](https://midcdmz.nrel.gov/spa/), this commandline spa interface may also use NREL's SPA as a backend, allowing a direct comparison of the two SPA implementations.
+
+Finally, with
+
+`make compare`
+
+you can compile a program to compare NREL's SPA with freespa.
 
 ## References
 [1] I.  Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589
 
 [2] I. Reda and A. Andreas, "Corrigendum to Solar position algorithm for solar radiation applications." Solar Energy 81.6 (2007): 838
 
+[3] A. Andreas, spa.c source code retrieved from https://midcdmz.nrel.gov/spa/ on the 27th of march 2023
+ 
+[4] L. V. Morrison and  F. R. Stephenson "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3) (2004): 327–336. 
+
+[5] I. Reda and A. Andreas, Solar Position Algorithm for Solar Radiation Applications. 55 pp.; NREL Report No. TP-560-34302, (2003) Revised January 2008

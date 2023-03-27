@@ -175,11 +175,27 @@ double RandLon()
 double RandLat()
 {
 	return M_PI*((double)rand()/(double)(RAND_MAX))-M_PI/2;
+}  
+double RandE()
+{
+	return 8400*((double)rand()/(double)(RAND_MAX))-400;
+} 
+double Randp()
+{
+	/* sea level records:
+	 * 870
+	 * 1085
+	 */
+	return 250*((double)rand()/(double)(RAND_MAX))-850;
+} 
+double RandT()
+{
+	return 40*((double)rand()/(double)(RAND_MAX))-10;
 } 
 // spa is allegibly accurate to 0.0003 degrees, i.e. about 5e-6 radians
 // small numerical differences from constant conversions are OK
 #define RAD_EPS 2e-7
-int SpecificTester(time_t tc, double lat, double lon, int verb)
+int SpecificTester(time_t tc, double lat, double lon, double E, double p, double T, int verb)
 {
 	sol_pos P1, P2;
 	double d, dt;
@@ -189,8 +205,8 @@ int SpecificTester(time_t tc, double lat, double lon, int verb)
 	dt=get_delta_t(ut);
 	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
 		dt=0;
-	P1=        SPA(ut, &dt, 0, lon,  lat, 0, 1010, 10);
-	P2=SPA_Wrapper(ut, &dt , 0, lon,  lat, 0, 1010, 10);
+	P1=        SPA(ut, &dt, 0, lon,  lat, E, p, T);
+	P2=SPA_Wrapper(ut, &dt , 0, lon,  lat, E, p, T);
 	d=AngleBetween(P1.az, P1.aa, P2.az, P2.aa); // note that simply comparing azimuth and zenith has a problem for small zenith angles
 								  // (azimuth has no effect for zenith=0) thus we compute the angle between the two 
 								  // solar vectors
@@ -212,11 +228,14 @@ int SpecificTester(time_t tc, double lat, double lon, int verb)
 int RandomTester()
 {
 	time_t tc;
-	double lat, lon;
+	double lat, lon, E, T,p;
 	lat=RandLat();
 	lon=RandLon();
+	E=RandE();
+	T=RandT();
+	p=Randp();
 	tc=RandEpoch();
-	return SpecificTester(tc, lat, lon,0);
+	return SpecificTester(tc, lat, lon,E,p,T, 0);
 }
 #define LAT 50.902996388
 #define LON 6.407165038
@@ -311,10 +330,10 @@ int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
 
 // this value is OK for freespa but counts most NREL spa results as wrong
-// #define XEPS deg2rad(0.5) // in radians
+// #define XEPS deg2rad(0.05) // in radians
 
 // this value should be OK for both
-#define XEPS deg2rad(1.1) // in radians
+#define XEPS deg2rad(1.0) // in radians
 // note that this value is the result of just trying what is still OK
 // it is in fact much larger than 
 
@@ -325,7 +344,7 @@ int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 #define SSN 16	//sun set NREL spa
 #define STN 32	//sun transit NREL spa
 
-int TimeTester(time_t tc, double lat, double lon, int verb)
+int TimeTester(time_t tc, double lat, double lon, double E, int verb)
 /* tests whether sunset/sunrise/transit times are accurate
  * Considers errors in radians, not seconds
  * The errors are computed using the own solar position routines
@@ -333,7 +352,6 @@ int TimeTester(time_t tc, double lat, double lon, int verb)
  *                       bits 3&4: number of errors in NREL spa
  * 
  * Note:  NREL's routines ignore elevation, freespa does not
- *        we test at sea level.
  * Note2: freespa does a more expensive optimization than NREL spa
  *        and is generally more accurate.
  */
@@ -349,16 +367,16 @@ int TimeTester(time_t tc, double lat, double lon, int verb)
 	
 	p=gmjtime_r(&tc, &ut);
 	dt=get_delta_t(p);
-	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
-		dt=0;
+	//if (dt>=8000) // NREL's spa has this limit, delta t does not ...
+	//	dt=0;
 	
-	SunTimes(ut, &dt, 0, lon, lat, 0, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
-	SPA_SunTimes(ut, &dt, 0, lon, lat, 0, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel);
+	SunTimes(ut, &dt, 0, lon, lat, E, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
+	SPA_SunTimes(ut, &dt, 0, lon, lat, E, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel);
 	
 	// sunrise	
-	P=SPA(&sunrise_free, &dt, 0, lon,  lat, 0, 1010, 10);
+	P=SPA(&sunrise_free, &dt, 0, lon,  lat, E, 1010, 10);
 	E1=P.az-M_PI/2-SUN_RADIUS;
-	P=SPA_Wrapper(&sunrise_nrel, &dt, 0, lon,  lat, 0, 1010, 10);
+	P=SPA_Wrapper(&sunrise_nrel, &dt, 0, lon,  lat, E, 1010, 10);
 	E2=P.az-M_PI/2-SUN_RADIUS;
 	if (fabs(E1)>XEPS)
 		R|=SRF;
@@ -366,9 +384,9 @@ int TimeTester(time_t tc, double lat, double lon, int verb)
 		R|=SRN;
 	
 	//sunset
-	P=SPA(&sunset_free, &dt, 0, lon,  lat, 0, 1010, 10);
+	P=SPA(&sunset_free, &dt, 0, lon,  lat, E, 1010, 10);
 	E1=P.az-M_PI/2-SUN_RADIUS;
-	P=SPA_Wrapper(&sunset_nrel, &dt, 0, lon,  lat, 0, 1010, 10);
+	P=SPA_Wrapper(&sunset_nrel, &dt, 0, lon,  lat, E, 1010, 10);
 	E2=P.az-M_PI/2-SUN_RADIUS;
 	if (fabs(E1)>XEPS)
 		R|=SSF;
@@ -376,9 +394,9 @@ int TimeTester(time_t tc, double lat, double lon, int verb)
 		R|=SSN;
 	
 	//transit
-	P=SPA(&transit_free, &dt, 0, lon,  lat, 0, 1010, 10);
+	P=SPA(&transit_free, &dt, 0, lon,  lat, E, 1010, 10);
 	E1=atan(sin(P.aa)*fabs(tan(P.az)));
-	P=SPA_Wrapper(&transit_nrel, &dt, 0, lon,  lat, 0, 1010, 10);
+	P=SPA_Wrapper(&transit_nrel, &dt, 0, lon,  lat, E, 1010, 10);
 	E2=atan(sin(P.aa)*fabs(tan(P.az)));
 	if (fabs(E1)>XEPS)
 		R|=STF;
@@ -396,16 +414,17 @@ int TimeTester(time_t tc, double lat, double lon, int verb)
  */
 
 #define MAXLAT 65
-#define MINLAT 65
+#define MINLAT -65
 
 int RandomTimeTester()
 {
 	time_t tc;
-	double lat, lon;
+	double lat, lon, E;
 	lat=deg2rad(MINLAT+(MAXLAT-MINLAT)*((double)rand()/(double)(RAND_MAX)));
 	lon=RandLon();
+	E=RandE();
 	tc=RandEpoch();
-	return TimeTester(tc, lat, lon,0);
+	return TimeTester(tc, lat, lon,E,0);
 }
 int main()
 {
@@ -476,12 +495,12 @@ int main()
 		}
 	}
 	printf("tested %d coodinates and times\n", N);
-	printf("freespa:  %d sun-rise errors\n", SREF);
-	printf("freespa:  %d sun-set errors\n", SSEF);
-	printf("freespa:  %d transit errors\n", STEF);
-	printf("NREL spa: %d sun-rise errors\n", SREN);
-	printf("NREL spa: %d sun-set errors\n", SSEN);
-	printf("NREL spa: %d transit errors\n", STEN);
+	printf("freespa:  %10d sun-rise error > %.2e degrees\n", SREF, rad2deg(XEPS));
+	printf("freespa:  %10d sun-set  error > %.2e degrees\n", SSEF, rad2deg(XEPS));
+	printf("freespa:  %10d transit  error > %.2e degrees\n", STEF, rad2deg(XEPS));
+	printf("NREL spa: %10d sun-rise error > %.2e degrees\n", SREN, rad2deg(XEPS));
+	printf("NREL spa: %10d sun-set  error > %.2e degrees\n", SSEN, rad2deg(XEPS));
+	printf("NREL spa: %10d transit  error > %.2e degrees\n", STEN, rad2deg(XEPS));
 	t=TOC(&t);
 	printf("---------------------------------\n\n");
 	
