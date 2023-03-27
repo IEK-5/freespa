@@ -25,9 +25,6 @@ test: $(SRC) $(HDR) $(OBJ) testspa.c testtime.c
 
 compare: $(SRC) $(HDR) $(OBJ) spa.c spa.h
 	$(CC) $(CFLAGS) -o comparespa compare_nrel_spa.c $(OBJ) $(LFLAGS)
-
-lst: freespa.o lst.c
-	$(CC) $(CFLAGS) -o lst lst.c $(OBJ) $(LFLAGS)
 	
 spa: freespa.o cli_spa.c $(OBJ)
 	$(CC) $(CFLAGS) -o spa $(NRELSPA) cli_spa.c $(OBJ) $(LFLAGS)

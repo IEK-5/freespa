@@ -309,7 +309,14 @@ int SPA_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 	return 0;
 }
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
-#define XEPS deg2rad(0.5) // in radians
+
+// this value is OK for freespa but counts most NREL spa results as wrong
+// #define XEPS deg2rad(0.5) // in radians
+
+// this value should be OK for both
+#define XEPS deg2rad(1.1) // in radians
+// note that this value is the result of just trying what is still OK
+// it is in fact much larger than 
 
 #define SRF 1	//sun rise freespa
 #define SSF 2	//sun set freespa
