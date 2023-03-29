@@ -193,7 +193,7 @@ int main(int argc, char **argv)
 	struct tm *p;
 	char buffer [80];
 	sol_pos P;
-	char c;
+	int c;
 	double Esr, Ess, Etr;
 	
 	while (1)
@@ -359,6 +359,7 @@ int main(int argc, char **argv)
 			}
 			case '?':
 			default:
+				
 				exit(1);
 		}
 	}
@@ -409,11 +410,11 @@ int main(int argc, char **argv)
 			P=SPA(&transit, NULL, 0, lon,  lat, 0, Pr, Temp);
 			Etr=atan(sin(P.aa)*fabs(tan(P.az)));
 			strftime (buffer,80,"Sun Rise:\t %Y-%m-%d %H:%M:%S",&sunrise);
-			printf("%s\n\t\t   (error %6.4f °)\n", buffer, rad2deg(Esr));
+			printf("%s\n\t\t   (error %7.4f °)\n", buffer, rad2deg(Esr));
 			strftime (buffer,80,"Transit:\t %Y-%m-%d %H:%M:%S",&transit);
-			printf("%s\n\t\t   (error %6.4f °)\n", buffer, rad2deg(Etr));
+			printf("%s\n\t\t   (error %7.4f °)\n", buffer, rad2deg(Etr));
 			strftime (buffer,80,"Sun Set:\t %Y-%m-%d %H:%M:%S",&sunset);
-			printf("%s\n\t\t   (error %6.4f °)\n", buffer, rad2deg(Ess));
+			printf("%s\n\t\t   (error %7.4f °)\n", buffer, rad2deg(Ess));
 		}
 		else
 		{

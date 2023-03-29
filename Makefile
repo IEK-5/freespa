@@ -11,9 +11,8 @@ ifneq ("$(wildcard spa.c)","")
 		OBJ:=$(OBJ) spa.o
 	endif
 endif
-$(info $$NRELSPA is [${NRELSPA}])
 
-all: freespa.o check
+all: freespa.o check spa
 distdir:
 	cp $(SRC) $(HDR) Makefile reference.dat $(distdir)
 check: test
@@ -31,7 +30,7 @@ spa: freespa.o cli_spa.c $(OBJ)
 
 freespa.o: $(HDR) freespa.c	
 clean:
-	rm *.o testspa
+	$(RM) *.o testspa testtime spa comparespa
 # targets for autotools compatibility
 install:
 install-data:
