@@ -11,6 +11,8 @@ ifneq ("$(wildcard spa.c)","")
 		OBJ:=$(OBJ) spa.o
 	endif
 endif
+deflat=50.90329
+deflon=6.41143
 
 all: freespa.o check spa
 distdir:
@@ -26,7 +28,7 @@ compare: $(SRC) $(HDR) $(OBJ) spa.c spa.h
 	$(CC) $(CFLAGS) -o comparespa compare_nrel_spa.c $(OBJ) $(LFLAGS)
 	
 spa: freespa.o cli_spa.c $(OBJ)
-	$(CC) $(CFLAGS) -o spa $(NRELSPA) cli_spa.c $(OBJ) $(LFLAGS)
+	$(CC) $(CFLAGS) -o spa $(NRELSPA) -DDEFLAT=$(deflat) -DDEFLON=$(deflon) cli_spa.c $(OBJ) $(LFLAGS)
 
 freespa.o: $(HDR) freespa.c	
 clean:

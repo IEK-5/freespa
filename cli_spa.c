@@ -171,13 +171,22 @@ int NREL_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 }
 #endif
 
+#ifndef DEFLAT
+	#define DEFLAT 50.90329
+#endif
+#ifndef DEFLON
+	#define DEFLON 6.41143
+#endif
+
+
+
 #define deg2rad(a) (M_PI*(a)/180.0)
 #define rad2deg(a) (180.0*(a)/M_PI)
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
 int main(int argc, char **argv)
 {
 	// the default coordinate, IEK-5 building at the Forschungszentrum Jülich Campus
-	double lon=deg2rad(6.41143),lat=deg2rad(50.90329);
+	double lon=deg2rad(DEFLON),lat=deg2rad(DEFLAT);
 	// elevation
 	double E=96.0, Pr=1010, Temp=10;
 	// use default freespa
