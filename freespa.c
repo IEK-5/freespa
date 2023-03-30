@@ -754,7 +754,7 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 	double lambda, alpha[3], delta[3];
 	double dpsi, deps, eps;
 	double h[3], a_refr, arg;
-	double m[3], n, dt, alphap[3], deltap[3], a,b,c,ap,bp,cp;
+	double m[3], n, alphap[3], deltap[3], a,b,c,ap,bp,cp;
 	JulianDay Day[3];
 	GeoCentricSolPos GP;
 	int i;
@@ -764,10 +764,6 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 	ut.tm_min=0;
 	ut.tm_sec=0;
 	
-	if (delta_t)
-		dt=*delta_t;
-	else
-		dt=get_delta_t(&ut);
 	Day[1]=MakeJulianDay(&ut, delta_t, delta_ut1);
 	Day[0]=AddDays(Day[1], -1);
 	Day[2]=AddDays(Day[1], 1);
@@ -832,7 +828,7 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 			if (m[i]<0)
 				m[i]+=1.0;		
 			v[i]=vv+deg2rad(360.985647)*m[i];
-			n=m[i];//+dt/86400;
+			n=m[i];
 			alphap[i]=alpha[1]+n*(a+b+c*n)/2;
 			deltap[i]=delta[1]+n*(ap+bp+cp*n)/2;
 			Hp[i]=fmod(v[i]+lon-alphap[i], 2*M_PI);
@@ -879,7 +875,7 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 		if (m[0]<0)
 			m[0]+=1.0;		
 		v[0]=vv+deg2rad(360.985647)*m[0];
-		n=m[0];//+dt/86400;
+		n=m[0];
 		alphap[0]=alpha[1]+n*(a+b+c*n)/2;
 		deltap[0]=delta[1]+n*(ap+bp+cp*n)/2;
 		Hp[0]=fmod(v[0]+lon-alphap[0], 2*M_PI);
@@ -938,7 +934,6 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 {
 	time_t tmin, tmax, t, to;
 	double E, Emin, Emax, Eo;
-	int i;
 	
 	(*Err)=0;
 	t=mkgmjtime(sunrise);
@@ -1034,7 +1029,6 @@ time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, doub
 	
 	time_t tmin, tmax, t, to;
 	double E, Emin, Emax, Eo;
-	int i;
 	
 	(*Err)=0;
 	t=mkgmjtime(sunset);
@@ -1128,7 +1122,6 @@ time_t BisectTransit(struct tm *sunrise, struct tm *transit,struct tm *sunset, d
 {
 	time_t tmin, tmax, t, to;
 	double E, Eo;
-	int i;
 
 	(*Err)=0;
 	t=mkgmjtime(transit);
