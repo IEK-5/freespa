@@ -67,7 +67,7 @@ In general freespa and NREL's SPA produce identical results. In some small detai
  
 To save the caller the burden to find appropriate Δt values, freespa includes both tabular historic Δt data and extrapolation routines. However, the user may still provide own Δt data. Here it should also be noted that Δt in NREL's SPA is limited to to the range -8000 -- 8000 s, whereas freespa imposes no limit (accepts any double float value). I found no reference nor rationale behind this seemingly arbitrary limit in NREL's SPA. However, using the historic data and long term Δt predictions from Morrison and  Stephenson, [4], it follows that Δt<8000 only holds for the approximate period 245 -- 3400, much shorter than the claimed validity for the period -2000 -- 6000 [1-2]. 
 
-Both NREL's SPA and freespa can compute sunrise, transit, and sunset. Accurately predicting sunrise and sunset is notoriously hard, primarely due to atmospheric refraction effects [5], so the accuracy of these predictions is limited. One should note that NREL's SPA ignores observer elevation when computing sunrise, transit, and sunset. This affects both the solar position w.r.t. the observer and, more importantly, the geometric dip (see also [5], page 27).
+Both NREL's SPA and freespa can compute sunrise, transit, and sunset. The sunrise/transit/sunset routines in freespa are based on NREL's SPA routines. However, freespa, in addition, takes into account the observer elevation and the geometric dip, and thus should be more accurate. Wilson [5] extensivly compared observed and modelled sunrise and sunset times, and concludes it is important to include both atmospheric refraction as well as the geometric dip.
 
 ## Testing
 To test the correct functioning of freespa you may use 
