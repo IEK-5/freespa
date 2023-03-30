@@ -67,7 +67,7 @@ In general freespa and NREL's SPA produce identical results. In some small detai
  
 To save the caller the burden to find appropriate Δt values, freespa includes both tabular historic Δt data and extrapolation routines. However, the user may still provide own Δt data. Here it should also be noted that Δt in NREL's SPA is limited to to the range -8000 -- 8000 s, whereas freespa imposes no limit (accepts any double float value). I found no reference nor rationale behind this seemingly arbitrary limit in NREL's SPA. However, using the historic data and long term Δt predictions from Morrison and  Stephenson, [4], it follows that Δt<8000 only holds for the approximate period 245 -- 3400, much shorter than the claimed validity for the period -2000 -- 6000 [1-2]. 
 
-Both NREL's SPA and freespa can compute sunrise, transit, and sunset. Here we find that freespa is more accurate, or at least self consistent. Assuming the SPA algorithm itself is accurate, we can test the accuracy of the computed  sunrise, transit, and sunset by computing the solar position at those particular times. For sunrise and sunset the top of the solar disk should touch the horizon, and for the solar transit the sun should be north or south, depending on the latitude and time of year. By randomly generating coordinates and times we can statistically tested the accuracy of the computed  sunrise, transit, and sunset times. Within the latitudes -65 -- 65, freespa is always within 0.05° accurate, whereas NREL's SPA is only accurate to about 1°. The improved accuracy of freespa is achieved by iteratively improving an initial solution. The initial solution of freespa is more or less identical to NREL's algorithm [5].
+Both NREL's SPA and freespa can compute sunrise, transit, and sunset. Accurately predicting sunrise and sunset is notoriously hard, primarely due to atmospheric refraction effects [5], so the accuracy of these predictions is limited. One should note that NREL's SPA ignores observer elevation when computing sunrise, transit, and sunset. This affects both the solar position w.r.t. the observer and, more importantly, the geometric dip (see also [5], page 27).
 
 ## Testing
 To test the correct functioning of freespa you may use 
@@ -97,4 +97,4 @@ you can compile a program to compare NREL's SPA with freespa.
  
 [4] L. V. Morrison and  F. R. Stephenson "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3) (2004): 327–336. 
 
-[5] I. Reda and A. Andreas, Solar Position Algorithm for Solar Radiation Applications. 55 pp.; NREL Report No. TP-560-34302, (2003) Revised January 2008
+[5] T. Wilson "Evaluating the Effectiveness of Current Atmospheric Refraction Models in Predicting Sunrise and Sunset Times." PhD diss., Michigan Technological University, 2018.

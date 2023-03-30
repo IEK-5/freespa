@@ -61,6 +61,7 @@ double AngleBetween(double z1, double a1, double z2, double a2)
 	f=cos(z1)*cos(z2)+sin(z1)*sin(z2)*cos(p);
 	return acos(f);
 }
+#define EARTH_R 6378136.6 //m at the equator [IERS Numerical Standards (IAG 1999)] 
 
 #define ABSOLUTEZERO -273.0 //convert C to K (aparently everyone ignores the .15)
 #define AP0 1010.0 // standard sea level air pressure
@@ -176,9 +177,12 @@ double RandLat()
 {
 	return M_PI*((double)rand()/(double)(RAND_MAX))-M_PI/2;
 }  
+
+// there is also elevations below 0
+// I ignore that
 double RandE()
 {
-	return 8400*((double)rand()/(double)(RAND_MAX))-400;
+	return 8000*((double)rand()/(double)(RAND_MAX));
 } 
 double Randp()
 {
@@ -356,7 +360,7 @@ int TimeTester(time_t tc, double lat, double lon, double E, int verb)
  *        and is generally more accurate.
  */
 {
-	int R=0;
+	int R=0, r1, r2;
 	double dt;
 	sol_pos P;
 	double E1, E2;
@@ -364,34 +368,44 @@ int TimeTester(time_t tc, double lat, double lon, double E, int verb)
 	struct tm *p;
 	struct tm sunset_nrel, sunrise_nrel, transit_nrel;
 	struct tm sunset_free, sunrise_free, transit_free;
+	double dipg;
+	
+	// freespa takes the geometric dip into account
+	
+	dipg=acos(EARTH_R/(EARTH_R+E));
 	
 	p=gmjtime_r(&tc, &ut);
 	dt=get_delta_t(p);
 	//if (dt>=8000) // NREL's spa has this limit, delta t does not ...
 	//	dt=0;
 	
-	SunTimes(ut, &dt, 0, lon, lat, E, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
-	SPA_SunTimes(ut, &dt, 0, lon, lat, E, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel);
+	r1=SunTimes(ut, &dt, 0, lon, lat, E, 1010.0, 10.0, &sunrise_free, &transit_free, &sunset_free);
+	r2=SPA_SunTimes(ut, &dt, 0, lon, lat, E, 1010.0, 10.0, &sunrise_nrel, &transit_nrel, &sunset_nrel);
 	
-	// sunrise	
-	P=SPA(&sunrise_free, &dt, 0, lon,  lat, E, 1010, 10);
-	E1=P.az-M_PI/2-SUN_RADIUS;
-	P=SPA_Wrapper(&sunrise_nrel, &dt, 0, lon,  lat, E, 1010, 10);
-	E2=P.az-M_PI/2-SUN_RADIUS;
-	if (fabs(E1)>XEPS)
-		R|=SRF;
-	if (fabs(E2)>XEPS)
-		R|=SRN;
-	
-	//sunset
-	P=SPA(&sunset_free, &dt, 0, lon,  lat, E, 1010, 10);
-	E1=P.az-M_PI/2-SUN_RADIUS;
-	P=SPA_Wrapper(&sunset_nrel, &dt, 0, lon,  lat, E, 1010, 10);
-	E2=P.az-M_PI/2-SUN_RADIUS;
-	if (fabs(E1)>XEPS)
-		R|=SSF;
-	if (fabs(E2)>XEPS)
-		R|=SSN;
+	// sunrise & set	
+	if (r1==0)
+	{
+		P=SPA(&sunrise_free, &dt, 0, lon,  lat, E, 1010, 10);
+		E1=P.az-M_PI/2-SUN_RADIUS-dipg;
+		if (fabs(E1)>XEPS)
+			R|=SRF;
+			
+		P=SPA(&sunset_free, &dt, 0, lon,  lat, E, 1010, 10);
+		E1=P.az-M_PI/2-SUN_RADIUS-dipg;
+		if (fabs(E1)>XEPS)
+			R|=SSF;
+	}
+	if (r2==0)
+	{
+		P=SPA_Wrapper(&sunrise_nrel, &dt, 0, lon,  lat, E, 1010, 10);
+		E2=P.az-M_PI/2-SUN_RADIUS;
+		if (fabs(E2)>XEPS)
+			R|=SRN;
+		P=SPA_Wrapper(&sunset_nrel, &dt, 0, lon,  lat, E, 1010, 10);
+		E2=P.az-M_PI/2-SUN_RADIUS;
+		if (fabs(E2)>XEPS)
+			R|=SSN;		
+	}
 	
 	//transit
 	P=SPA(&transit_free, &dt, 0, lon,  lat, E, 1010, 10);

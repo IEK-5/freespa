@@ -748,7 +748,7 @@ double ablim(double a)
 	}
 	return a;
 }
-int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
+int SunTimes_nrel(struct tm ut, double dipg, double *delta_t, double delta_ut1, double lon, double lat, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
 {
 	double dtau, vv, v[3], H,Hp[3];
 	double lambda, alpha[3], delta[3];
@@ -800,7 +800,7 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
 	}
 	// approximate solar transit time in radians
 	m[0]=(alpha[1]-lon-vv);
-	a_refr=-Bennet(p,T,0.0)-SUN_RADIUS;
+	a_refr=-Bennet(p,T,0.0)-SUN_RADIUS-dipg;
 	arg=(sin(a_refr)-sin(lat)*sin(delta[1]))/(cos(lat)*cos(delta[1]));
 	// test if we have a regular sunrise/sunset
 	if ((arg>-1) && (arg<1))
@@ -905,13 +905,13 @@ int SunTimes_nrel(struct tm ut, double *delta_t, double delta_ut1, double lon, d
  * bisection.
  */ 
 // return the elevation of the sun in radians for time t
-double SunRiseSetErr(time_t t, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
+double SunRiseSetErr(time_t t, double dip, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
 {
 	sol_pos P;
 	struct tm ut={0}, *put;
 	put=gmjtime_r(&t, &ut);
 	P=SPA(put, delta_t, delta_ut1, lon, lat, e, p, T);
-	return P.az-M_PI/2-SUN_RADIUS;
+	return P.az-M_PI/2-SUN_RADIUS-dip;
 }
 // return the error in transit angle in radians for time t
 double SunTransitErr(time_t t, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
@@ -930,14 +930,14 @@ double SunTransitErr(time_t t, double *delta_t, double delta_ut1, double lon, do
  * This way the routines are guaranteed to finish
  */ 
 
-time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
+time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double dipg, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
 {
 	time_t tmin, tmax, t, to;
 	double E, Emin, Emax, Eo;
 	
 	(*Err)=0;
 	t=mkgmjtime(sunrise);
-	E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+	E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 	to=t;
 	Eo=fabs(E);
 	if (E>0)
@@ -946,7 +946,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 		Emin=E;
 	
 		tmax=t+600; // probably within the next 10 min
-		Emax=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+		Emax=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		if (Emax>0)
 		{
 			if (fabs(Emin)<Eo)
@@ -955,7 +955,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 				Eo=fabs(Emin);
 			}
 			tmax=mkgmjtime(transit);
-			Emax=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+			Emax=SunRiseSetErr(tmax, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		}
 		if (fabs(Emax)<Eo)
 		{
@@ -975,7 +975,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 		Emax=E;	
 	
 		tmin=t-600; // probably within the previous 10 min
-		Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+		Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		if (Emin<0)
 		{
 			// OK, then let us make one big step back
@@ -985,7 +985,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 				Eo=fabs(Emin);
 			}
 			tmin=mkgmjtime(transit)-43200;
-			Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+			Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		}
 		if (fabs(Emin)<Eo)
 		{
@@ -1003,7 +1003,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 	while ((Eo>eps)&&(tmax-tmin>1))
 	{
 		t=(tmax+tmin)/2;
-		E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+		E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		if (E>0)
 		{
 			tmin=t;
@@ -1024,7 +1024,7 @@ time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double *delta_t, do
 }
 			
 
-time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
+time_t BisectSunSet(struct tm *sunset, struct tm *transit, double dipg, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
 {
 	
 	time_t tmin, tmax, t, to;
@@ -1032,7 +1032,7 @@ time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, doub
 	
 	(*Err)=0;
 	t=mkgmjtime(sunset);
-	E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+	E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 	to=t;
 	Eo=fabs(E);
 	if (E<0)
@@ -1041,7 +1041,7 @@ time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, doub
 		Emin=E;	
 	
 		tmax=t+600; // probably within the next 10 min
-		Emax=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+		Emax=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		if (Emax<0)
 		{
 			if (fabs(Emin)<Eo)
@@ -1050,7 +1050,7 @@ time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, doub
 				Eo=fabs(Emin);
 			}
 			tmax=mkgmjtime(transit)+43200;
-			Emax=SunRiseSetErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
+			Emax=SunRiseSetErr(tmax, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		}
 		if (fabs(Emax)<Eo)
 		{
@@ -1069,7 +1069,7 @@ time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, doub
 		tmax=t;
 		Emax=E;
 		tmin=t-600; // probably within the previous 10 min
-		Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+		Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		if (Emin>0)
 		{
 			// OK, then let us make one big step back
@@ -1079,7 +1079,7 @@ time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, doub
 				Eo=fabs(Emin);
 			}
 			tmin=mkgmjtime(transit);
-			Emin=SunRiseSetErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
+			Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		}
 		if (fabs(Emin)<Eo)
 		{
@@ -1098,7 +1098,7 @@ time_t BisectSunSet(struct tm *sunset, struct tm *transit, double *delta_t, doub
 	while ((Eo>eps)&&(tmax-tmin>1))
 	{
 		t=(tmax+tmin)/2;
-		E=SunRiseSetErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
+		E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
 		if (E>0)
 		{
 			tmax=t;
@@ -1194,6 +1194,7 @@ time_t BisectTransit(struct tm *sunrise, struct tm *transit,struct tm *sunset, d
  * 					to adjust for the irregular Earth rotation rate.
  *  - lon			observer longitude (radians)
  *  - lat 			observer latitude (radians)
+ *  - e 			observer elevation (m)
  *  - p				atmospheric pressure (mb)
  *  - T 			Temperature (C)
  * 
@@ -1218,16 +1219,18 @@ int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double
 {
 	time_t t;
 	int r, E;
+	double dipg; // geometric dip
 	
-	r=SunTimes_nrel(ut, delta_t, delta_ut1, lon, lat, p, T, sunrise, transit, sunset);
+	dipg=acos(EARTH_R/(EARTH_R+e));	
+	r=SunTimes_nrel(ut, dipg, delta_t, delta_ut1, lon, lat, p, T, sunrise, transit, sunset);
 	
 	if (r==0)
 	{
 		int rr=0;
-		t=BisectSunRise(sunrise, transit, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);		
+		t=BisectSunRise(sunrise, transit, dipg, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);		
 		gmjtime_r(&t,sunrise);
 		rr+=E;
-		t=BisectSunSet(sunset, transit, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
+		t=BisectSunSet(sunset, transit, dipg, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
 		gmjtime_r(&t,sunset);
 		rr+=E;
 		t=BisectTransit(sunrise, transit, sunset, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);

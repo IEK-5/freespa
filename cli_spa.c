@@ -394,20 +394,20 @@ int main(int argc, char **argv)
 	if (suntimes)
 	{
 		if (fspa==1)
-			r=SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+			r=SunTimes(ut, NULL, 0, lon, lat, E, Pr, Temp, &sunrise, &transit, &sunset);
 #ifdef NRELSPA
 		else
-			r=NREL_SunTimes(ut, NULL, 0, lon, lat, 0, Pr, Temp, &sunrise, &transit, &sunset);
+			r=NREL_SunTimes(ut, NULL, 0, lon, lat, E, Pr, Temp, &sunrise, &transit, &sunset);
 #endif
 	
 		printf("| Sunrise and Sunset----------------\n");
 		if (r==0)
 		{
-			P=SPA(&sunrise, NULL, 0.0, lon,  lat, 0, Pr, Temp);
+			P=SPA(&sunrise, NULL, 0.0, lon,  lat, E, Pr, Temp);
 			Esr=P.az-M_PI/2-SUN_RADIUS;
-			P=SPA(&sunset, NULL, 0, lon,  lat, 0, Pr, Temp);
+			P=SPA(&sunset, NULL, 0, lon,  lat, E, Pr, Temp);
 			Ess=P.az-M_PI/2-SUN_RADIUS;
-			P=SPA(&transit, NULL, 0, lon,  lat, 0, Pr, Temp);
+			P=SPA(&transit, NULL, 0, lon,  lat, E, Pr, Temp);
 			Etr=atan(sin(P.aa)*fabs(tan(P.az)));
 			strftime (buffer,80,"Sun Rise:\t %Y-%m-%d %H:%M:%S",&sunrise);
 			printf("%s\n\t\t   (error %7.4f °)\n", buffer, rad2deg(Esr));
@@ -425,7 +425,7 @@ int main(int argc, char **argv)
 			
 			if (fspa==1)
 			{
-				P=SPA(&transit, NULL, 0, lon,  lat, 0, Pr, Temp);
+				P=SPA(&transit, NULL, 0, lon,  lat, E, Pr, Temp);
 				Etr=atan(sin(P.aa)*fabs(tan(P.az)));
 				strftime (buffer,80,"Transit:\t %Y-%m-%d %H:%M:%S",&transit);
 				printf("%s\n\t\t   (error %6.4f °)\n", buffer, rad2deg(Etr));
