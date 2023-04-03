@@ -70,7 +70,7 @@ double Bennet(double p, double T, double h)
 	const double BENNET[] = {2.9088820866572158e-04,2.2267533386408395e-03,7.6794487087750510e-02};
 	return Refr(BENNET, p, T, h);
 }
-// simple wrapper around NREL's spa code
+// simple wrapper around NREL's spa code, computes real solar position
 sol_pos NREL_SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
             double lat, double e)
 {
@@ -109,24 +109,69 @@ sol_pos NREL_SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 	return P;
 }
 
-// simple wrapper around NREL's spa code
-int NREL_SunTimes(struct tm ut, double *delta_t, double delta_ut1, 
-			double lon, double lat, double e, double p, double T, 
-			struct tm *sunrise, struct tm *transit, struct tm *sunset)
+// simple wrapper around NREL's spa code computes aparent solar position
+sol_pos SPA_WrapperApp(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
+            double lat, double e, double p, double T)
 {
 	spa_data spa;
-	time_t t, t0, tt;	
-	
-	spa.year=ut.tm_year+1900;
-	spa.month=ut.tm_mon+1;
-	spa.day=ut.tm_mday;
-	spa.hour=ut.tm_hour;
-	spa.minute=ut.tm_min;
-	spa.second=(double)ut.tm_sec;
+	sol_pos P;	
+	int r;
+	P.E=0;	
+	spa.year=ut->tm_year+1900;
+	spa.month=ut->tm_mon+1;
+	spa.day=ut->tm_mday;
+	spa.hour=ut->tm_hour;
+	spa.minute=ut->tm_min;
+	spa.second=(double)ut->tm_sec;
 	if (delta_t)
 		spa.delta_t=*delta_t;
 	else
-		spa.delta_t=get_delta_t(&ut);
+		spa.delta_t=get_delta_t(ut);
+	spa.delta_ut1=delta_ut1;
+	spa.timezone=0;
+	spa.longitude=180.0*lon/M_PI;
+	spa.latitude=180.0*lat/M_PI;
+	spa.elevation=e;
+	spa.pressure=p;
+	spa.temperature=T;
+	spa.slope=0;
+	spa.azm_rotation=0;
+	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
+	spa.function=SPA_ZA;
+	r=spa_calculate(&spa);
+	if (r)
+		fprintf(stderr,"NREL spa returned %d\n", r);
+	
+	P.z=fmod(M_PI*spa.zenith/180,2*M_PI);
+	P.a=fmod(M_PI*spa.azimuth/180, 2*M_PI);
+	return P;
+}
+
+#define SUN_RADIUS 4.6542695162932789e-03 // in radians
+solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1, 
+                   double lon, double lat, double e, double *gdip, 
+                   double p, double T)
+{
+	solar_day D={0};
+	sol_pos P;
+	double E;
+	spa_data spa;
+	time_t t, t0, tt;	
+	int i;
+	
+	for (i=0;i<11;i++)
+		D.status[i]=EV_NA; 
+	
+	spa.year=ut->tm_year+1900;
+	spa.month=ut->tm_mon+1;
+	spa.day=ut->tm_mday;
+	spa.hour=ut->tm_hour;
+	spa.minute=ut->tm_min;
+	spa.second=(double)ut->tm_sec;
+	if (delta_t)
+		spa.delta_t=*delta_t;
+	else
+		spa.delta_t=get_delta_t(ut);
 	spa.delta_ut1=delta_ut1;
 	spa.timezone=0;
 	spa.longitude=180.0*lon/M_PI;
@@ -142,30 +187,44 @@ int NREL_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 	if ((spa.sunrise<0)||(spa.sunset<0)||(spa.suntransit<0))
 	{
 		if ((spa.latitude<67.9)&&(spa.latitude>-67.9))
-			return 10;
+			return D;
 		if (spa.zenith<90)
-			return 1;		
-		return -1;
+			return D;		
+		return D;
 	}
 	
-	ut.tm_hour=0;
-	ut.tm_min=0;
-	ut.tm_sec=0;
-	t0=mkgmjtime(&ut);
+	ut->tm_hour=0;
+	ut->tm_min=0;
+	ut->tm_sec=0;
+	t0=mkgmjtime(ut);
 	
 	tt=t0+(time_t)(3600*spa.suntransit);
-	transit=gmjtime_r(&tt, transit);
+	gmjtime_r(&tt, D.ev+1);
+	D.t[1]=tt;
+	D.status[1]=EV_OK;
+	D.E[1]=NAN;
+		
+	
 	
 	t=t0+(time_t)(3600*spa.sunrise);
 	if (t>tt)
 		t-=86400;
-	sunrise=gmjtime_r(&t, sunrise);
+	gmjtime_r(&t, D.ev+3);
+	D.t[3]=t;
+	P=SPA_WrapperApp(D.ev+3, delta_t, delta_ut1, lon, lat,e, p, T);
+	D.E[3]=P.z-M_PI/2-SUN_RADIUS;
+	D.status[3]=EV_OK;
+	
 	t=t0+(time_t)(3600*spa.sunset);
 	if (t<tt)
 		t+=86400;
-	sunset=gmjtime_r(&t, sunset);
+	gmjtime_r(&t, D.ev+4);
+	D.t[4]=t;
+	P=SPA_WrapperApp(D.ev+4, delta_t, delta_ut1, lon, lat,e, p, T);
+	D.E[4]=P.z-M_PI/2-SUN_RADIUS;
+	D.status[4]=EV_OK;
 	// TODO match freespa return value
-	return 0;
+	return D;
 }
 #endif
 
@@ -414,7 +473,12 @@ int main(int argc, char **argv)
 		solar_day D;
 		int i;
 		printf("| Solar Day Events---------------------\n");
-		D=SolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp);
+		if (fspa==1)
+			D=SolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp);
+#ifdef NRELSPA
+		else
+			D=NRELSolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp);
+#endif
 		for (i=0;i<11;i++)
 		{
 			// go through the day events
@@ -422,13 +486,13 @@ int main(int argc, char **argv)
 			{
 				strftime (buffer,80,"%Y-%m-%d %H:%M:%S",D.ev+chrono[i]);
 				printf("%s : %s\n", solevents[chrono[i]],buffer);
+				if (chrono[i]>2)
+					printf("\t\t      (error %7.4f °)\n", rad2deg(D.E[chrono[i]]));
 			}
 			else if (D.status[chrono[i]]==1)
 				printf("%s : -- sun above\n", solevents[chrono[i]]);
 			else if (D.status[chrono[i]]==-1)
 				printf("%s : -- sun below\n", solevents[chrono[i]]);
-			if (chrono[i]>2)
-				printf("\t\t      (error %7.4f °)\n", rad2deg(D.E[chrono[i]]));
 		}	
 
 		printf("---------------------------------------\n\n");

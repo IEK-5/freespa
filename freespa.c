@@ -725,6 +725,13 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1,
 }
 
 /* Computing the Solar Day Events
+ * there is no doubt aa more efficient way to compute this. I suppose
+ * NREL SPA is more efficient too (but not as accurate). Furthermore,
+ * it is more complicated. I choose simple slow and accurate over 
+ * complicated fast and less accurate. The less accurate may be 
+ * solvable but probably making it more complicated again, so sod it,
+ * keep it simple.
+ *  
  * I first compute a local transit time and the previous and next solar 
  * midnights. Using SPA we then find the maximal zenith at the previous
  * midnight, the minimum zenith angle at tranit and the maximum zenith 
@@ -861,7 +868,7 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	if ((z>z1)&&(z>z2))
 		return 1; // sun always above z
 		
-	/* We make a fiorst guess by assuming the following function for the
+	/* We make a first guess by assuming the following function for the
 	 * solar zenith:
 	 * z(t) = a + b cos(ω (t-t1))
 	 * 
@@ -920,7 +927,7 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	{
 		/* bisection */
 		tt=(time_t)round(((z-zmin)*(double)tmax+(zmax-z)*(double)tmin)/((z-zmin)+(zmax-z)));
-		// avoid all too asymmetrical conditions
+		// avoid all too asymmetrical brackets
 		if (((tt-tmin)>MAXRAT*(tmax-tt))||(MAXRAT*(tt-tmin)<(tmax-tt)))
 			tt=(tmin+tmax)/2;
 		put=gmjtime_r(&tt, &ut);
