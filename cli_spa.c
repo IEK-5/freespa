@@ -97,7 +97,7 @@ sol_pos NREL_SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 	spa.temperature=10;
 	spa.slope=0;
 	spa.azm_rotation=0;
-	spa.atmos_refract=0;
+	spa.atmos_refract=Bennet(1010, 10, 0)*180/M_PI;
 	spa.function=SPA_ZA;
 	r=spa_calculate(&spa);
 	if (r)
@@ -105,6 +105,7 @@ sol_pos NREL_SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 	
 	P.z=fmod(M_PI*spa.zenith/180,2*M_PI);
 	P.a=fmod(M_PI*spa.azimuth/180, 2*M_PI);
+	P.z+=M_PI*spa.del_e/180;
 	return P;
 }
 
@@ -204,17 +205,14 @@ int main(int argc, char **argv)
 	// what to compute/show
 	int tsoltime=0, solpos=1, suntimes=0;	
 	// per default we use the current time
-	time_t tc=time(NULL), tmax;
-	int r;
+	time_t tc=time(NULL);
 	
-	struct tm sunrise={0}, sunset={0}, transit={0};
 	struct tm ut={0};
 	struct tm lst={0};
 	struct tm *p;
 	char buffer [80];
 	sol_pos P, Pa;
 	int c;
-	double Esr, Ess, Etr;
 	
 	while (1)
 	{

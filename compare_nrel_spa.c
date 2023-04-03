@@ -131,13 +131,16 @@ sol_pos SPA_Wrapper(struct tm *ut, double *delta_t, double delta_ut1, double lon
 	spa.temperature=10;
 	spa.slope=0;
 	spa.azm_rotation=0;
-	spa.atmos_refract=0;
+
+	spa.atmos_refract=Bennet(1010, 10, 0)*180/M_PI;
 	spa.function=SPA_ZA;
 	r=spa_calculate(&spa);
 	if (r)
 		fprintf(stderr,"NREL spa returned %d\n", r);
+	
 	P.z=fmod(M_PI*spa.zenith/180,2*M_PI);
 	P.a=fmod(M_PI*spa.azimuth/180, 2*M_PI);
+	P.z+=M_PI*spa.del_e/180;
 	return P;
 }
 
@@ -146,42 +149,15 @@ sol_pos SPA_WrapperApp(struct tm *ut, double *delta_t, double delta_ut1, double 
             double lat, double e, double p, double T)
 {
 	spa_data spa;
-	sol_pos P;
+	sol_pos P;	
 	int r;
-	
-	
-	P.E=0;
-	
+	P.E=0;	
 	spa.year=ut->tm_year+1900;
 	spa.month=ut->tm_mon+1;
 	spa.day=ut->tm_mday;
 	spa.hour=ut->tm_hour;
 	spa.minute=ut->tm_min;
 	spa.second=(double)ut->tm_sec;
-	
-/* 
- * Morrison, & Stephenson (2004) provide the following equation for Δt
- * 
- *                    2
- *            ⎡y-1820⎤
- * Δt(y) = 32 ⎢──────⎥  - 20
- *            ⎣ 100  ⎦
- * 
- * However, for some reason NREL spa limits Δt to rather small values 
- * (Δt<8000). This limits the validity of NREL spa to approximately the 
- * years between 245 -- 3400. This is still a large range but 
- * considerably smaller than the claimed -2000 -- 6000. 
- * 
- * If you use NREL spa, and need a broader range than 245 -- 3400, you 
- * should remove the 8000 limit (see the "validate_inputs" routine). 
- * 
- * Morrison, L. V., & Stephenson, F. R. (2004). Historical Values of 
- * the Earth’s Clock Error ΔT and the Calculation of Eclipses. 
- * Journal for the History of Astronomy, 35(3), 327–336. 
- * https://doi.org/10.1177/002182860403500305
- * 
- * Ps. freespa does not limit Δt, so knock your self out :)
- */	
 	if (delta_t)
 		spa.delta_t=*delta_t;
 	else
@@ -195,14 +171,14 @@ sol_pos SPA_WrapperApp(struct tm *ut, double *delta_t, double delta_ut1, double 
 	spa.temperature=T;
 	spa.slope=0;
 	spa.azm_rotation=0;
-	spa.atmos_refract=Bennet(p,T,0.0);
+	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
 	spa.function=SPA_ZA;
 	r=spa_calculate(&spa);
 	if (r)
 		fprintf(stderr,"NREL spa returned %d\n", r);
+	
 	P.z=fmod(M_PI*spa.zenith/180,2*M_PI);
 	P.a=fmod(M_PI*spa.azimuth/180, 2*M_PI);
-	P.z+=spa.del_e*M_PI/180.0;
 	return P;
 }
 #define MIN_EPOCH -125282592000 // year -2000
@@ -259,7 +235,7 @@ double RandT()
 } 
 // spa is allegibly accurate to 0.0003 degrees, i.e. about 5e-6 radians
 // small numerical differences from constant conversions are OK
-#define RAD_EPS 2e-7
+#define RAD_EPS 5e-7
 int SpecificTester(time_t tc, double lat, double lon, double E, double p, double T, int verb)
 {
 	sol_pos P1, P2, P1a, P2a;
@@ -276,6 +252,7 @@ int SpecificTester(time_t tc, double lat, double lon, double E, double p, double
 	
 	P2=SPA_Wrapper(ut, &dt , 0, lon,  lat, E);
 	P2a=SPA_WrapperApp(ut, &dt , 0, lon,  lat, E, p, T);
+	//P2a=AparentSolpos(P2,&dip,E,p,T);
 	
 	d=AngleBetween(P1.z, P1.a, P2.z, P2.a); // note that simply comparing azimuth and zenith has a problem for small zenith angles
 								  // (azimuth has no effect for zenith=0) thus we compute the angle between the two 

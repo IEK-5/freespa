@@ -123,8 +123,8 @@ int LogSPA(char *fn, int N)
 		p=gmtime_r(&tc, &ut);
 		if (p)
 		{
-			P=SPA(p, 0, 0, lon,  lat, E);
-			Pa=AparentSolpos(P,NULL, E, pp, T);
+			P=SPA(p, 0, 0, lon,  lat, e);
+			Pa=AparentSolpos(P,NULL, e, pp, T);
 			fprintf(f,"%16ld\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\n", tc, lat,lon,e, pp, T, P.a,P.z,Pa.a, Pa.z);
 		}
 		else
@@ -240,6 +240,7 @@ int TestSPA(char *fn)
 	if (Ec)
 		fprintf(stderr,"Warning: %d unix time conversion errors\n", Ec);
 	free(timestr);
+	fclose(f);
 	return 0;
 }
 #define N 10000
