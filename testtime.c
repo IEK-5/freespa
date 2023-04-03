@@ -151,130 +151,6 @@ int TestMK()
 	return 0;
 }
 
-#define ST_EPS deg2rad(2)
-
-int TimeTester(time_t tc, double lat, double lon, double e)
-{
-	int R=0;
-	char buffer [80];
-	struct tm ut={0};
-	struct tm sunset={0}, sunrise={0}, transit={0};
-	
-	gmjtime_r(&tc, &ut);
-	
-	R=SunTimes(ut, NULL, 0, lon, lat, e,1010.0, 10.0, &sunrise, &transit, &sunset);
-	//R=SunTimes_(ut, NULL, 0, lon, lat,1010.0, 10.0, &sunrise, &transit, &sunset);
-	if (R==0)
-	{
-		sol_pos P;
-		double E;
-		P=SPA(&sunrise, NULL, 0, lon,  lat, e, 1010, 10);
-		E=P.az-M_PI/2-SUN_RADIUS;
-		if (fabs(E)>ST_EPS)
-		{
-			strftime (buffer,80,"UTC:     %Y-%m-%d %H:%M:%S",&ut);
-			puts(buffer);		
-			printf("%ld %e %e\n", tc, lon, lat);
-			printf("%.3fE %.3fN\n", rad2deg(lon), rad2deg(lat));
-			strftime (buffer,80,"sunrise: %Y-%m-%d %H:%M:%S",&sunrise);
-			puts(buffer);
-			printf("Sunrise at %.3g degrees\n\n", rad2deg(E));
-			R|=1;
-		}	
-		P=SPA(&sunset, NULL, 0, lon,  lat, e, 1010, 10);
-		E=P.az-M_PI/2-SUN_RADIUS;
-		if (fabs(E)>ST_EPS)
-		{
-			strftime (buffer,80,"UTC:     %Y-%m-%d %H:%M:%S",&ut);
-			puts(buffer);		
-			printf("%ld %e %e\n", tc, lon, lat);
-			printf("%.3fE %.3fN\n", rad2deg(lon), rad2deg(lat));
-			strftime (buffer,80,"sunset: %Y-%m-%d %H:%M:%S",&sunset);
-			puts(buffer);	
-			printf("Sunset at %.3g degrees\n\n", rad2deg(E));
-			R|=2;
-		}	
-		P=SPA(&transit, NULL, 0, lon,  lat, e, 1010, 10);
-		E=fabs(P.aa-M_PI);
-		if (E>M_PI/2)
-			E=fabs(E-M_PI);
-		if ((P.aa>0)&&(P.aa<M_PI))
-			E=-E;
-		E*=fabs(sin(P.az));
-		if (fabs(E)>ST_EPS)
-		{
-			strftime (buffer,80,"UTC:     %Y-%m-%d %H:%M:%S",&ut);
-			puts(buffer);		
-			printf("%ld %e %e\n", tc, lon, lat);
-			printf("%.3fE %.3fN\n", rad2deg(lon), rad2deg(lat));
-			strftime (buffer,80,"transit: %Y-%m-%d %H:%M:%S",&transit);
-			puts(buffer);		
-			printf("SunTransit at %.3g degrees off\n\n", rad2deg(E));
-			R|=4;
-		}		
-	}
-	else 
-	{	
-		sol_pos P;
-		double E;
-		R=0;
-		P=SPA(&transit, NULL, 0, lon,  lat, e, 1010, 10);
-		E=fabs(P.aa-M_PI);
-		if (E>M_PI/2)
-			E=fabs(E-M_PI);
-		if ((P.aa>0)&&(P.aa<M_PI))
-			E=-E;
-		E*=fabs(sin(P.az));
-		if (fabs(E)>ST_EPS)
-		{
-			strftime (buffer,80,"UTC:     %Y-%m-%d %H:%M:%S",&ut);
-			puts(buffer);		
-			printf("%ld %e %e\n", tc, lon, lat);
-			printf("%.3fE %.3fN\n", rad2deg(lon), rad2deg(lat));
-			
-			strftime (buffer,80,"transit: %Y-%m-%d %H:%M:%S",&transit);
-			puts(buffer);		
-			printf("SunTransit at %.3g degrees off\n\n", rad2deg(E));
-			R|=4;
-		}	
-	}
-	return R;
-}
-
-double RandLon()
-{
-	return 2*M_PI*((double)rand()/(double)(RAND_MAX))-M_PI;
-} 
-double RandLat()
-{
-	return M_PI*((double)rand()/(double)(RAND_MAX))-M_PI/2;
-} 
-#define NN 1000
-int TestSuntimes()
-{
-	int i, e=0;
-	struct tm ut={0};
-	double lat, lon;
-	time_t tc;
-	srand((unsigned) time(&tc));
-	tc=0;
-	i=0;
-	for (i=0;i<NN;i++)
-	{
-		tc=RandEpoch();
-		gmtime_r(&tc, &ut);
-		lat=RandLat();
-		lon=RandLon();
-		if (TimeTester(tc, lat, lon, 0))
-			e++;
-	}
-	if (e==0)
-		printf("All OK\n");
-	else
-		printf("%d errors in %d runs\n", e, NN);
-	return 0;
-}
-
 
 int main()
 {
@@ -294,8 +170,6 @@ int main()
 		printf("Test mkgmjtime:\n");
 		TestMK();
 	}
-		
-	TestSuntimes();
 	
 	exit(0);
 }

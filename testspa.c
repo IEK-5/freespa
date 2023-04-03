@@ -89,7 +89,7 @@ double Randp()
 	 * 870
 	 * 1085
 	 */
-	return 250*((double)rand()/(double)(RAND_MAX))-850;
+	return 250*((double)rand()/(double)(RAND_MAX))+850;
 } 
 double RandT()
 {
@@ -97,7 +97,7 @@ double RandT()
 } 
 int LogSPA(char *fn, int N)
 {
-	sol_pos P;
+	sol_pos P, Pa;
 	int E=0;
 	int i;
 	struct tm ut, *p;
@@ -123,8 +123,9 @@ int LogSPA(char *fn, int N)
 		p=gmtime_r(&tc, &ut);
 		if (p)
 		{
-			P=SPA(p, 0, 0, lon,  lat, E, pp, T);
-			fprintf(f,"%16ld\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\t%19.12e\n", tc, lat,lon,e, pp, T, P.a,P.z,P.aa, P.az);
+			P=SPA(p, 0, 0, lon,  lat, E);
+			Pa=AparentSolpos(P,NULL, E, pp, T);
+			fprintf(f,"%16ld\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\n", tc, lat,lon,e, pp, T, P.a,P.z,Pa.a, Pa.z);
 		}
 		else
 		{
@@ -155,7 +156,7 @@ double AngleBetween(double z1, double a1, double z2, double a2)
 #define RAD_EPS 2e-7
 int TestSPA(char *fn)
 {
-	sol_pos P, Pr;
+	sol_pos P, Pa, Pr, Pra;
 	int Et=0, Ec=0;
 	int i,j=0;
 	char line[LLEN];
@@ -178,15 +179,15 @@ int TestSPA(char *fn)
 			break;
 		if (line[0]=='#')
 			continue;
-		i=sscanf(line,"%ld %lf %lf %lf %lf %lf %lf %lf %lf %lf", &tc, &lat, &lon, &e, &pp, &T, &Pr.a, &Pr.z, &Pr.aa, &Pr.az);
-		if (i==7)
+		i=sscanf(line,"%ld %lf %lf %lf %lf %lf %lf %lf %lf %lf", &tc, &lat, &lon, &e, &pp, &T, &Pr.a, &Pr.z, &Pra.a, &Pra.z);
+		if (i==10)
 		{
 			p=gmtime_r(&tc, &ut);
 			if (p)
 			{
 				j++;
-				P=SPA(p, NULL, 0, lon,  lat, e, pp, T);		
-				d=AngleBetween(P.az, P.aa, Pr.az, Pr.aa);
+				P=SPA(p, NULL, 0, lon,  lat, e);		
+				d=AngleBetween(P.z, P.a, Pr.z, Pr.a);
 				if (fabs(d)>RAD_EPS)
 				{
 					Et++;
@@ -194,14 +195,33 @@ int TestSPA(char *fn)
 					{
 						strftime(timestr, 50, "%Y/%m/%d %T %Z",p);
 						fprintf(stderr, "%s (%ld)\nlon: %.12e\nlat: %.12e\n", timestr, tc, lon, lat);
+						fprintf(stderr, "e: %.12e\np: %.12e\nT: %.12e\n", e,pp,T);
 						fprintf(stderr, "Solar vector deviates by %e rad\n", d);
-						printf("a zenith:  %e\t%e\t%e\n", P.az, Pr.az, P.az-Pr.az);
-						printf("a azimuth: %e\t%e\t%e\n", P.aa, Pr.aa, P.aa-Pr.aa);
 						printf("t zenith:  %e\t%e\t%e\n", P.z, Pr.z, P.z-Pr.z);
 						printf("t azimuth: %e\t%e\t%e\n\n", P.a, Pr.a, P.a-Pr.a);
 					}
 					else if (Et==10)
 						fprintf(stderr, "10 or more deviations from reference!\n");
+				}
+				else
+				{	
+					Pa=AparentSolpos(P,NULL,e,pp,T);	
+					d=AngleBetween(Pa.z, Pa.a, Pra.z, Pra.a);
+					if (fabs(d)>RAD_EPS)
+					{
+						Et++;
+						if (Et<10)
+						{
+							strftime(timestr, 50, "%Y/%m/%d %T %Z",p);
+							fprintf(stderr, "%s (%ld)\nlon: %.12e\nlat: %.12e\n", timestr, tc, lon, lat);
+						fprintf(stderr, "e: %.12e\np: %.12e\nT: %.12e\n", e,pp,T);
+							fprintf(stderr, "Solar vector deviates by %e rad\n", d);
+							printf("a zenith:  %e\t%e\t%e\n", Pa.z, Pra.z, Pa.z-Pra.z);
+							printf("a azimuth: %e\t%e\t%e\n\n", Pa.a, Pra.a, Pa.a-Pra.a);
+						}
+						else if (Et==10)
+							fprintf(stderr, "10 or more deviations from reference!\n");
+					}
 				}
 			}
 			else

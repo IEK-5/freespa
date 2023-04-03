@@ -72,7 +72,7 @@ double Bennet(double p, double T, double h)
 }
 // simple wrapper around NREL's spa code
 sol_pos NREL_SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
-            double lat, double e, double p, double T)
+            double lat, double e)
 {
 	spa_data spa;
 	sol_pos P;	
@@ -93,21 +93,18 @@ sol_pos NREL_SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 	spa.longitude=180.0*lon/M_PI;
 	spa.latitude=180.0*lat/M_PI;
 	spa.elevation=e;
-	spa.pressure=p;
-	spa.temperature=T;
+	spa.pressure=1010;
+	spa.temperature=10;
 	spa.slope=0;
 	spa.azm_rotation=0;
-	spa.atmos_refract=Bennet(p, T, 0)*180/M_PI;
+	spa.atmos_refract=0;
 	spa.function=SPA_ZA;
 	r=spa_calculate(&spa);
 	if (r)
 		fprintf(stderr,"NREL spa returned %d\n", r);
 	
-	P.az=fmod(M_PI*spa.zenith/180,2*M_PI);
-	P.aa=fmod(M_PI*spa.azimuth/180, 2*M_PI);
-	P.a=P.aa;
-	P.z=P.az;
-	P.z+=M_PI*spa.del_e/180;
+	P.z=fmod(M_PI*spa.zenith/180,2*M_PI);
+	P.a=fmod(M_PI*spa.azimuth/180, 2*M_PI);
 	return P;
 }
 
@@ -178,7 +175,20 @@ int NREL_SunTimes(struct tm ut, double *delta_t, double delta_ut1,
 	#define DEFLON 6.41143
 #endif
 
-
+char *solevents[11]={
+	"Prev.Sol.Midnight",
+	"Transit          ",
+	"Next Sol.Midnight",
+	"Sunrise          ",
+	"Sunset           ",
+	"Civil Dawn       ",
+	"Civil Dusk       ",
+	"Nautical Dawn    ",
+	"Nautical Dusk    ",
+	"Astronomical Dawn",
+	"Astronomical Dusk"
+};
+int chrono[11]={0,9,7,5,3,1,4,6,8,10,2};
 
 #define deg2rad(a) (M_PI*(a)/180.0)
 #define rad2deg(a) (180.0*(a)/M_PI)
@@ -194,14 +204,15 @@ int main(int argc, char **argv)
 	// what to compute/show
 	int tsoltime=0, solpos=1, suntimes=0;	
 	// per default we use the current time
-	time_t tc=time(NULL);
+	time_t tc=time(NULL), tmax;
 	int r;
 	
 	struct tm sunrise={0}, sunset={0}, transit={0};
 	struct tm ut={0};
+	struct tm lst={0};
 	struct tm *p;
 	char buffer [80];
-	sol_pos P;
+	sol_pos P, Pa;
 	int c;
 	double Esr, Ess, Etr;
 	
@@ -304,12 +315,6 @@ int main(int argc, char **argv)
 				int i=0;
 				printf("USAGE: %s [options]\n", argv[0]);
 				printf("options:\n");
-				/*struct option {
-					   const char *name;
-					   int         has_arg;
-					   int        *flag;
-					   int         val;
-				};*/
 				while (long_options[i].val)
 				{
 					switch (long_options[i].val)
@@ -376,74 +381,59 @@ int main(int argc, char **argv)
 	p=gmjtime_r(&tc, &ut);
 	if (tsoltime)
 	{
-		printf("| Time -----------------------------\n");
+		printf("| Time --------------------------------\n");
 		strftime (buffer,80,"UTC:\t\t%Y-%m-%d %H:%M:%S",&ut);
 		puts(buffer);
-		ut=TrueSolarTime(p, 0, 0, lon, lat);
-		strftime (buffer,80,"LST:\t\t%Y-%m-%d %H:%M:%S",&ut);
+		lst=TrueSolarTime(p, 0, 0, lon, lat);
+		strftime (buffer,80,"LST:\t\t%Y-%m-%d %H:%M:%S",&lst);
 		puts(buffer);
-		printf("------------------------------------\n\n");
+		printf("---------------------------------------\n\n");
 	}
 	
 	if (solpos)
 	{
 		if (fspa==1)
-			P=SPA(p, NULL, 0, lon,  lat, E, Pr, Temp);
+		{
+			P=SPA(p, NULL, 0, lon,  lat, E);
+			Pa=AparentSolpos(P, NULL, E, Pr, Temp);
+		}
 #ifdef NRELSPA
 		else
-			P=NREL_SPA(p, NULL, 0, lon,  lat, E, Pr, Temp);
+		{
+			P=NREL_SPA(p, NULL, 0, lon,  lat, E);
+			Pa=AparentSolpos(P, NULL, E, Pr, Temp);
+		}
 #endif
-		printf("| Solar Position -------------------\n");
-		printf("aparent zenith: \t%10f °\n", rad2deg(P.az));
-		printf("aparent azimuth:\t%10f °\n", rad2deg(P.aa));
-		printf("true    zenith: \t%10f °\n", rad2deg(P.z));
-		printf("true    azimuth:\t%10f °\n", rad2deg(P.a));
-		printf("------------------------------------\n\n");
+		printf("| Solar Position ----------------------\n");
+		printf("aparent zenith: \t%13f °\n", rad2deg(Pa.z));
+		printf("aparent azimuth:\t%13f °\n", rad2deg(Pa.a));
+		printf("true    zenith: \t%13f °\n", rad2deg(P.z));
+		printf("true    azimuth:\t%13f °\n", rad2deg(P.a));
+		printf("---------------------------------------\n\n");
 	}
 	if (suntimes)
 	{
-		if (fspa==1)
-			r=SunTimes(ut, NULL, 0, lon, lat, E, Pr, Temp, &sunrise, &transit, &sunset);
-#ifdef NRELSPA
-		else
-			r=NREL_SunTimes(ut, NULL, 0, lon, lat, E, Pr, Temp, &sunrise, &transit, &sunset);
-#endif
-	
-		printf("| Sunrise and Sunset----------------\n");
-		if (r==0)
+		solar_day D;
+		int i;
+		printf("| Solar Day Events---------------------\n");
+		D=SolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp);
+		for (i=0;i<11;i++)
 		{
-			P=SPA(&sunrise, NULL, 0.0, lon,  lat, E, Pr, Temp);
-			Esr=P.az-M_PI/2-SUN_RADIUS;
-			P=SPA(&sunset, NULL, 0, lon,  lat, E, Pr, Temp);
-			Ess=P.az-M_PI/2-SUN_RADIUS;
-			P=SPA(&transit, NULL, 0, lon,  lat, E, Pr, Temp);
-			Etr=atan(sin(P.aa)*fabs(tan(P.az)));
-			strftime (buffer,80,"Sun Rise:\t %Y-%m-%d %H:%M:%S",&sunrise);
-			printf("%s\n\t\t   (error %7.4f °)\n", buffer, rad2deg(Esr));
-			strftime (buffer,80,"Transit:\t %Y-%m-%d %H:%M:%S",&transit);
-			printf("%s\n\t\t   (error %7.4f °)\n", buffer, rad2deg(Etr));
-			strftime (buffer,80,"Sun Set:\t %Y-%m-%d %H:%M:%S",&sunset);
-			printf("%s\n\t\t   (error %7.4f °)\n", buffer, rad2deg(Ess));
-		}
-		else
-		{
-			if (r<0)
-				printf("polar night\n");
-			else
-				printf("midnight sun\n");
-			
-			if (fspa==1)
+			// go through the day events
+			if (D.status[chrono[i]]==0)
 			{
-				P=SPA(&transit, NULL, 0, lon,  lat, E, Pr, Temp);
-				Etr=atan(sin(P.aa)*fabs(tan(P.az)));
-				strftime (buffer,80,"Transit:\t %Y-%m-%d %H:%M:%S",&transit);
-				printf("%s\n\t\t   (error %6.4f °)\n", buffer, rad2deg(Etr));
+				strftime (buffer,80,"%Y-%m-%d %H:%M:%S",D.ev+chrono[i]);
+				printf("%s : %s\n", solevents[chrono[i]],buffer);
 			}
-			else
-				printf("NREL spa only computes transit if \nthe sun rises and sets\n");
-			
-		}
-		printf("------------------------------------\n\n");
+			else if (D.status[chrono[i]]==1)
+				printf("%s : -- sun above\n", solevents[chrono[i]]);
+			else if (D.status[chrono[i]]==-1)
+				printf("%s : -- sun below\n", solevents[chrono[i]]);
+			if (chrono[i]>2)
+				printf("\t\t      (error %7.4f °)\n", rad2deg(D.E[chrono[i]]));
+		}	
+
+		printf("---------------------------------------\n\n");
 	}
 	exit(0);
 }

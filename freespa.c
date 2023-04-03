@@ -268,6 +268,11 @@ time_t mkgmjtime(struct tm *ut)
 	return (time_t)round((J.JD-JD0)*86400)+ETJD0;
 }
 
+time_t JDmkgmjtime(JulianDay J)
+{
+	return (time_t)round((J.JD-JD0)*86400)+ETJD0;
+}
+
 JulianDay MakeJulianDayEpoch(time_t t, double *delta_t, double delta_ut1)
 {
 	struct tm ut;
@@ -473,14 +478,14 @@ static inline double iBennet(double p, double T, double h)
 // some more polynomials
 const double ECLIPTIC_MEAN_OBLIQUITY[] = {2.45,5.79,27.87,7.12,-39.05,-249.67,-51.38,1999.25,-1.55,-4680.93,84381.448};
 const double GSTA[] = {deg2rad(-1/38710000.0),deg2rad(0.000387933),0.0,deg2rad(280.46061837)};
-sol_pos solpos(double lon, double lat, double e, double p, double T, JulianDay JD, GeoCentricSolPos GP)
+sol_pos solpos(double lon, double lat, double e, JulianDay JD, GeoCentricSolPos GP)
 {
 	double dtau, v, H, u, x, y;
 	double lambda, alpha, delta, xi;
 	double delta_prime, H_prime;
 	//double aplpha_prime;
 	double dpsi, deps, eps, dalpha;
-	double h, dh=0, a_refr;
+	double h;
 	sol_pos P;
 	
 	// aberation correction
@@ -532,40 +537,56 @@ sol_pos solpos(double lon, double lat, double e, double p, double T, JulianDay J
 	// topocentric elevation angle without atmospheric refraction correction
 	h=asin(sin(lat)*sin(delta_prime)+cos(lat)*cos(delta_prime)*cos(H_prime));
 	
-	a_refr=Bennet(p,T,0.0);
-	if (h>=-a_refr-SUN_RADIUS)
-		dh=iBennet(p,T,h);
-	
 	// compute sun zenith
 	P.z=M_PI/2-h;
 	
-	// compute aparent sun zenith
-	P.az=P.z-dh;
+	// compute sun azimuth
 	P.a=fmod(M_PI+atan2(sin(H_prime),cos(H_prime)*sin(lat)-tan(delta_prime)*cos(lat)),2*M_PI);
-	P.aa=P.a;
 	
 	// limit angular range
 	P.z=fmod(P.z,2*M_PI);
-	P.az=fmod(P.az,2*M_PI);
 	if (P.z<0)
 	{
 		P.z=-P.z;
 		P.a=fmod(P.a+M_PI,2*M_PI);
-	}
-	if (P.az<0)
-	{
-		P.az=-P.az;
-		P.aa=fmod(P.a+M_PI,2*M_PI);
 	}
 	if (P.z>M_PI)
 	{
 		P.z=2*M_PI-P.z;
 		P.a=fmod(P.a+2*M_PI,2*M_PI);
 	}
-	if (P.az>M_PI)
+	return P;
+}
+
+sol_pos AparentSolpos(sol_pos P, double *gdip, double e, double p, double T)
+{
+	double dip, h, dh=0, a_refr;
+	if (gdip)
+		dip=*gdip;
+	else
+		dip=acos(EARTH_R/(EARTH_R+e));
+	
+	// given the aparent solar height at the horizon, what would the 
+	// refraction angle be? The horizon is at -dip
+	a_refr=Bennet(p,T,-dip);
+	h=M_PI/2-P.z;
+	
+	// compute if the sun is visible
+	if (h>=-a_refr-SUN_RADIUS-dip)
+		dh=iBennet(p,T,h);
+		
+	// compute aparent sun zenith
+	P.z=P.z-dh;
+	P.z=fmod(P.z,2*M_PI);
+	if (P.z<0)
 	{
-		P.az=2*M_PI-P.az;
-		P.aa=fmod(P.a+M_PI,2*M_PI);
+		P.z=-P.z;
+		P.a=fmod(P.a+M_PI,2*M_PI);
+	}
+	if (P.z>M_PI)
+	{
+		P.z=2*M_PI-P.z;
+		P.a=fmod(P.a+M_PI,2*M_PI);
 	}
 	return P;
 }
@@ -651,12 +672,12 @@ int InputCheck(double delta_ut1, double lon,
  *  - sol_pos struct with the real and aparent solar position
  */
 sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
-            double lat, double e, double p, double T)
+            double lat, double e)
 {
 	JulianDay D;
 	GeoCentricSolPos G;
 	sol_pos P;
-	P.E=InputCheck(delta_ut1, lon, lat, e, p, T);
+	P.E=InputCheck(delta_ut1, lon, lat, e, 1010, 10);
 	if (!P.E)
 	{
 		D=MakeJulianDay(ut, delta_t, delta_ut1);
@@ -667,7 +688,7 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 			return P;
 		}
 		G=Geocentric_pos(D);
-		P=solpos(lon,lat,e,p,T,D,G);
+		P=solpos(lon,lat,e,D,G);
 	}
 	return P;
 }
@@ -686,7 +707,8 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
  * output:
  *  - tm struct with local solar time
  */
-struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double lon, double lat)
+struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, 
+                        double lon, double lat)
 {
 	double E;
 	struct tm nt={0};
@@ -701,6 +723,370 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double
 	JDgmtime(D, &nt);
 	return nt;
 }
+
+/* Computing the Solar Day Events
+ * I first compute a local transit time and the previous and next solar 
+ * midnights. Using SPA we then find the maximal zenith at the previous
+ * midnight, the minimum zenith angle at tranit and the maximum zenith 
+ * for the next midnight.
+ * From here on we can use fairly simple interative solvers for the 
+ * various rise and set events (sunrise/sunset/civil dawn/civil dusk/
+ * nautical dawn/nautical dusk/astronomical dawn/astronomical dusk)  
+ */
+
+/* FindSolTime:
+ * To find the transit and mid night events we use the EoT routine with 
+ * fixed point iterations.
+ * FindSolTime: 
+ * input:
+ *  - t:			input unix time
+ * 	- hour			target solar time
+ * 	- min			target solar time
+ * 	- sec			target solar time
+ *  - delta_t		pointer to Δt value, the difference between the 
+ *                  Earth rotation time and the Terrestrial Time. If 
+ * 					the pointer is NULL, use internal tables to find Δt.
+ *  - delta_ut1 	is a fraction of a second that is added to the UTC 
+ * 					to adjust for the irregular Earth rotation rate.
+ *  - lon			observer longitude (radians)
+ *  - lat 			observer latitude (radians)
+ * output:
+ * 	- closest unix time for which the local true solar time was as 
+ *    specified by the target solar time
+ * 		
+ */
+// fraction of a day represented by one second.
+#define FRACDAYSEC 1.1574074074074073e-05
+#define MAX_FPITER 20
+time_t FindSolTime(time_t t, int hour, int min, int sec, double *delta_t, 
+                   double delta_ut1, double lon, double lat)
+{
+	double E;
+	double dt=1;
+	int iter=0;
+	struct tm nt={0};
+	JulianDay D, Dn;
+	GeoCentricSolPos G;
+	
+	D=MakeJulianDayEpoch(t, delta_t, delta_ut1);
+	// first estimate, ignore EoT
+	gmjtime_r(&t, &nt);
+	// compute fraction of a day to shift time to target
+	dt=(double)(hour-nt.tm_hour)/24.4;
+	dt+=(double)(min-nt.tm_min)/1440.0;
+	dt+=(double)(sec-nt.tm_sec)/86400.0;
+	// we limit dt to less than 0.5 days
+	// this should keep the time from slipping into other days
+	if (dt>0.5)
+		dt-=1.0;
+	if (dt<-0.5)
+		dt+=1.0;
+	D.JD+=dt; 
+	
+	dt=1;
+	while ((fabs(dt)>FRACDAYSEC)&&(iter<MAX_FPITER))
+	{
+		// adapt julian day D
+		Dn=D;
+		G=Geocentric_pos(D);
+		E=EoT(lat,D,G);	
+		Dn.JD+=(lon+E)/M_PI/2; 
+		JDgmtime(Dn, &nt);
+		// compute fraction of a day to shift the time D
+		dt=(double)(hour-nt.tm_hour)/24.4;
+		dt+=(double)(min-nt.tm_min)/1440.0;
+		dt+=(double)(sec-nt.tm_sec)/86400.0;
+		if (dt>0.5)
+			dt-=1.0;
+		if (dt<-0.5)
+			dt+=1.0;
+		D.JD+=dt; 
+		iter++;
+	}
+	return JDmkgmjtime(D);
+}
+
+/* FindSolZenith:
+ * Find a time for which the sun is at a certain zenith within a solar 
+ * day
+ * input:
+ *  - t1			unix time for a minimum or maximum zenith
+ * 	- t2			unix time for the *subsequent* maximum or minimum
+ * 					note that t2 should be about 0.5 days after t1
+ * 	- z1			solar zenith angle for t1
+ * 	- z2			solar zenith angle for t2
+ *  - delta_t		pointer to Δt value, the difference between the 
+ *                  Earth rotation time and the Terrestrial Time. If 
+ * 					the pointer is NULL, use internal tables to find Δt.
+ *  - delta_ut1 	is a fraction of a second that is added to the UTC 
+ * 					to adjust for the irregular Earth rotation rate.
+ *  - lon			observer longitude (radians)
+ *  - lat 			observer latitude (radians)
+ *  - e				observer elevation (m)
+ *  - gdip			geometric dip, i.e. how far the horizon is below the 
+ *                  observer (in rad). If this pointer is NULL the 
+ *                  geometric dip is computed from the observer elevation
+ *                  (assuming the horizon is at sea level)
+ *  - p				atmospheric pressure (mb)
+ *  - T 			Temperature (C)
+ *  - z 			Target Zenith
+ * 
+ * output:
+ * 	- tz			unix time at which the zenith was as specified
+ * 
+ * return value:
+ * 0				All OK
+ * 1				NA, solar zenith always lower than target
+ * -1				NA, solar zenith always higher than target		
+ */
+// accuracy of solar rise/set events
+#define Z_EPS deg2rad(0.05)
+#define MAXRAT 2
+#define Z_MAXITER 100
+int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t, 
+                  double delta_ut1, double lon, double lat, double e, double *gdip, 
+                  double p, double T, double z, time_t *tz, double *E)
+{
+	double a, b, w, R;
+	sol_pos P;
+	double zmin, zmax, eb;
+	time_t tt, tmin, tmax, tb;
+	struct tm ut={0}, *put;
+	int iter=0;
+	
+	(*tz)=0;
+	(*E)=0;
+	if ((z<z1)&&(z<z2))
+		return -1; // sun always below z
+	if ((z>z1)&&(z>z2))
+		return 1; // sun always above z
+		
+	/* We make a fiorst guess by assuming the following function for the
+	 * solar zenith:
+	 * z(t) = a + b cos(ω (t-t1))
+	 * 
+	 * as at t1 and t2 the zenith is in a maximum/minimum we set:
+	 *       π
+	 * ω = ─────
+	 *     t2-t1
+	 * 
+	 * Further, we find:
+	 * a = -(cos(t2*w)*z1-cos(t1*w)*z2)/(cos(t1*w)-cos(t2*w))
+	 * b = (z1-z2)/(cos(t1*w)-cos(t2*w))
+	 * 
+	 * we can then estimate the moment for the desired zenith as:
+	 * 
+	 *          arccos(z/b-a/b)
+	 * t = t1 + ───────────────
+	 *                 ω
+	 */
+	w=M_PI/((double)(t2-t1));
+	b=(cos((double)t1*w)-cos((double)t2*w));
+	a=-(cos((double)t2*w)*z1-cos((double)t1*w)*z2)/b;
+	b=(z1-z2)/b;
+	
+	R=(double)(2*((z2<z1))-1); // sun rising (R=1.0) or falling (R=-1.0)
+	// first guess:
+	tt=t1+(time_t)round(acos(z/b-a/b)/w);
+	put=gmjtime_r(&tt, &ut);
+	P=SPA(put, delta_t, delta_ut1, lon, lat, e);
+	P=AparentSolpos(P,gdip,e,p,T);
+	tb=tt;
+	eb=P.z-z;
+	if (fabs(P.z-z)<Z_EPS)
+	{
+		(*E)=eb;
+		(*tz)=tb;
+		return 0;
+	}
+	
+	if (R*(P.z-z)>0)
+	{
+		// tt too small
+		tmin=tt;
+		zmin=P.z;
+		tmax=t2;
+		zmax=z2;
+	}
+	else
+	{
+		tmax=tt;
+		zmax=P.z;
+		tmin=t1;
+		zmin=z1;
+	}
+	/* use bisection */
+	while ((tmax-tmin>1)&&(iter<Z_MAXITER))
+	{
+		/* bisection */
+		tt=(time_t)round(((z-zmin)*(double)tmax+(zmax-z)*(double)tmin)/((z-zmin)+(zmax-z)));
+		// avoid all too asymmetrical conditions
+		if (((tt-tmin)>MAXRAT*(tmax-tt))||(MAXRAT*(tt-tmin)<(tmax-tt)))
+			tt=(tmin+tmax)/2;
+		put=gmjtime_r(&tt, &ut);
+		P=SPA(put, delta_t, delta_ut1, lon, lat, e);
+		P=AparentSolpos(P,gdip,e,p,T);
+		if (fabs(P.z-z)<fabs(eb))
+		{
+			eb=P.z-z;
+			tb=tt;
+		}
+		if (fabs(eb)<Z_EPS)
+		{
+			(*E)=eb;
+			(*tz)=tb;
+			return 0;
+		}
+		
+		if (R*(P.z-z)>0)
+		{
+			// tt too small
+			tmin=tt;
+			zmin=P.z;
+		}
+		else
+		{
+			tmax=tt;
+			zmax=P.z;
+		}
+		iter++;
+	}
+	(*E)=eb;
+	(*tz)=tb;
+	return 0;
+}
+
+/* events must me an array of tm structs of length 11. It shall contain
+ * previous low
+ * transit
+ * next low
+ * sunrise
+ * sunset
+ * civil dawn
+ * civil dusk
+ * nautical dawn
+ * nautical dusk
+ * astronomical dawn
+ * astronomical dusk
+ */
+int SDMASK=(SUNRISE|SUNSET|CVDAWN|CVDUSK|NADAWN|NADUSK|ASDAWN|ASDUSK);
+solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1, 
+                   double lon, double lat, double e, double *gdip, 
+                   double p, double T)
+{
+	solar_day D={0};
+	time_t t, tp, tc, tn;
+	sol_pos Pp, Pc, Pn;
+	double dip;
+	struct tm *put;
+	int i;
+	
+	for (i=0;i<11;i++)
+		D.status[i]=EV_NA; 
+	
+	if (InputCheck(delta_ut1, lon, lat, e, p, T))
+		return D;
+		
+	t=mkgmjtime(ut);
+	// find the closest transit
+	tc=FindSolTime(t, 12, 0, 0, delta_t, delta_ut1, lon, lat);
+	// previous low point (approx 0.5 day before transit)
+	tp=FindSolTime(tc-43200, 0, 0, 0, delta_t, delta_ut1, lon, lat);
+	// next low point (approx 0.5 day after transit)
+	tn=FindSolTime(tc+43200, 0, 0, 0, delta_t, delta_ut1, lon, lat);
+	
+	// previous low
+	put=gmjtime_r(&tp, D.ev);
+	D.t[0]=tp;
+	D.status[0]=EV_OK;
+	D.E[0]=NAN;
+	Pp=SPA(put, delta_t, delta_ut1, lon, lat, e);
+	Pp=AparentSolpos(Pp,gdip,e,p,T);
+	
+	// current transit
+	put=gmjtime_r(&tc, D.ev+1);
+	D.t[1]=tc;
+	D.status[1]=EV_OK;
+	D.E[1]=NAN;
+	Pc=SPA(put, delta_t, delta_ut1, lon, lat, e);
+	Pc=AparentSolpos(Pc,gdip,e,p,T);
+	
+	// next low
+	put=gmjtime_r(&tn, D.ev+2);
+	D.t[2]=tn;
+	D.status[2]=EV_OK;
+	D.E[2]=NAN;
+	Pn=SPA(put, delta_t, delta_ut1, lon, lat, e);
+	Pn=AparentSolpos(Pn,gdip,e,p,T);
+	
+	// geometric dip
+	if (gdip)
+		dip=*gdip;
+	else
+		dip=acos(EARTH_R/(EARTH_R+e));
+		
+		
+	// compute events
+	i=3;	
+	if (SDMASK&SUNRISE)
+	{
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	if (SDMASK&SUNSET)
+	{
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	
+	dip+=deg2rad(6);
+	if (SDMASK&CVDAWN)
+	{
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	if (SDMASK&CVDUSK)
+	{
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	
+	dip+=SUN_RADIUS+deg2rad(6);
+	if (SDMASK&NADAWN)
+	{
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	if (SDMASK&NADUSK)
+	{
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	
+	dip+=deg2rad(6);
+	if (SDMASK&ASDAWN)
+	{
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	if (SDMASK&ASDUSK)
+	{
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		put=gmjtime_r(D.t+i, D.ev+i);
+	}
+	i++;
+	return D;
+	
+}
+
+
 
 /* SunTimes_nrel - NREL's algorithm (see documentation at 
  * https://midcdmz.nrel.gov/spa/)
@@ -748,6 +1134,8 @@ double ablim(double a)
 	}
 	return a;
 }
+
+
 int SunTimes_nrel(struct tm ut, double dipg, double *delta_t, double delta_ut1, double lon, double lat, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
 {
 	double dtau, vv, v[3], H,Hp[3];
@@ -910,8 +1298,9 @@ double SunRiseSetErr(time_t t, double dip, double *delta_t, double delta_ut1, do
 	sol_pos P;
 	struct tm ut={0}, *put;
 	put=gmjtime_r(&t, &ut);
-	P=SPA(put, delta_t, delta_ut1, lon, lat, e, p, T);
-	return P.az-M_PI/2-SUN_RADIUS-dip;
+	P=SPA(put, delta_t, delta_ut1, lon, lat, e);
+	P=AparentSolpos(P,NULL,e,p,T);
+	return P.z-M_PI/2-SUN_RADIUS-dip;
 }
 // return the error in transit angle in radians for time t
 double SunTransitErr(time_t t, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
@@ -919,8 +1308,9 @@ double SunTransitErr(time_t t, double *delta_t, double delta_ut1, double lon, do
 	sol_pos P;
 	struct tm ut={0}, *put;
 	put=gmjtime_r(&t, &ut);
-	P=SPA(put, delta_t, delta_ut1, lon, lat, e, p, T);
-	return atan(sin(P.aa)*fabs(tan(P.az))); // angle with the plane x=0;
+	P=SPA(put, delta_t, delta_ut1, lon, lat, e);
+	P=AparentSolpos(P,NULL,e,p,T);
+	return atan(sin(P.a)*fabs(tan(P.z))); // angle with the plane x=0;
 }
 
 /* bisection algorithms:
@@ -1246,8 +1636,9 @@ int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double
 		t=BisectTransit(sunrise, transit, sunset, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
 		gmjtime_r(&t,transit);
 		
-		P=SPA(transit, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (P.az>M_PI/2)
+		P=SPA(transit, delta_t, delta_ut1, lon, lat, e);
+		P=AparentSolpos(P,&dipg,e,p,T);
+		if (P.z>M_PI/2)
 			return -1;
 		else
 			return 1;
