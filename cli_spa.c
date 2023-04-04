@@ -159,8 +159,11 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	time_t t, t0, tt;	
 	int i;
 	
+	if (gdip)
+		fprintf(stderr, "Warning: NREL spa does not take a geometric dip into account\n");
+
 	for (i=0;i<11;i++)
-		D.status[i]=EV_NA; 
+		D.status[i]=_FREESPA_EV_NA; 
 	
 	spa.year=ut->tm_year+1900;
 	spa.month=ut->tm_mon+1;
@@ -195,7 +198,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	tt=t0+(time_t)(3600*spa.suntransit);
 	gmjtime_r(&tt, D.ev+1);
 	D.t[1]=tt;
-	D.status[1]=EV_OK;
+	D.status[1]=_FREESPA_EV_OK;
 	D.E[1]=NAN;
 		
 	
@@ -207,7 +210,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	D.t[3]=t;
 	P=SPA_WrapperApp(D.ev+3, delta_t, delta_ut1, lon, lat,e, p, T);
 	D.E[3]=P.z-M_PI/2-SUN_RADIUS;
-	D.status[3]=EV_OK;
+	D.status[3]=_FREESPA_EV_OK;
 	
 	t=t0+(time_t)(3600*spa.sunset);
 	if (t<tt)
@@ -216,7 +219,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	D.t[4]=t;
 	P=SPA_WrapperApp(D.ev+4, delta_t, delta_ut1, lon, lat,e, p, T);
 	D.E[4]=P.z-M_PI/2-SUN_RADIUS;
-	D.status[4]=EV_OK;
+	D.status[4]=_FREESPA_EV_OK;
 	// TODO match freespa return value
 	return D;
 }
@@ -251,6 +254,7 @@ int main(int argc, char **argv)
 {
 	// the default coordinate, IEK-5 building at the Forschungszentrum Jülich Campus
 	double lon=deg2rad(DEFLON),lat=deg2rad(DEFLAT);
+	double dip, *gdip=NULL;
 	// elevation
 	double E=96.0, Pr=1010, Temp=10;
 	// use default freespa
@@ -275,6 +279,7 @@ int main(int argc, char **argv)
 		{
 			{"coordinate",  required_argument, 0, 'c'},
 			{"elevation",   required_argument, 0, 'e'},
+			{"dip",   		required_argument, 0, 'd'},
 			{"pressure",    required_argument, 0, 'p'},
 			{"temperature", required_argument, 0, 'T'},
 			{"time",        required_argument, 0, 't'},
@@ -287,7 +292,7 @@ int main(int argc, char **argv)
 			{0, 0, 0, 0}
 		};
 		int option_index = 0;
-		c = getopt_long (argc, argv, "c:e:p:T:t:sSrNAh",long_options, &option_index);
+		c = getopt_long (argc, argv, "c:e:d:p:T:t:sSrNAh",long_options, &option_index);
 		if (c == -1)
 			break;
 			
@@ -322,6 +327,20 @@ int main(int argc, char **argv)
 					return 1;	
 				}
 				E=atof(optarg);
+				break;
+			case 'd':
+				if (!optarg)
+				{
+					fprintf(stderr, "Error: --dip (-d) requires an geometric dip value in degrees\n");
+					return 1;	
+				}
+				dip=deg2rad(atof(optarg));
+				if (fabs(dip)>M_PI/2)
+				{
+					fprintf(stderr, "Error: invalid dip value, value may not exceed 90° (absolute)\n");
+					return 1;	
+				}
+				gdip=&dip;
 				break;
 			case 'p':
 				if (!optarg)
@@ -452,13 +471,13 @@ int main(int argc, char **argv)
 		if (fspa==1)
 		{
 			P=SPA(p, NULL, 0, lon,  lat, E);
-			Pa=aparent(P, NULL, E, Pr, Temp);
+			Pa=aparent(P, gdip, E, Pr, Temp);
 		}
 #ifdef NRELSPA
 		else
 		{
 			P=NREL_SPA(p, NULL, 0, lon,  lat, E);
-			Pa=aparent(P, NULL, E, Pr, Temp);
+			Pa=aparent(P, gdip, E, Pr, Temp);
 		}
 #endif
 		printf("| Solar Position ----------------------\n");
@@ -474,7 +493,7 @@ int main(int argc, char **argv)
 		int i;
 		printf("| Solar Day Events---------------------\n");
 		if (fspa==1)
-			D=SolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp, aparent);
+			D=SolarDay(&ut, NULL, 0, lon, lat, E, gdip, Pr, Temp, aparent);
 #ifdef NRELSPA
 		else
 			D=NRELSolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp);

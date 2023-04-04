@@ -8,7 +8,7 @@ Freespa uses the following units:
 - time is generally specified in UTC
 
 
-## Data Strutures:
+## Data Structures:
 In freespa.h several data structures are defined. The `sol_pos` structure is defined as:
 
     typedef struct sol_pos {
@@ -30,7 +30,7 @@ where z is the zenith angle, and a the azimuth. The integer E is an error flag w
 
 which may be combined with a binary OR. If all is OK E=0.
 
-In case you are interested in computing the dayly events such as sunrise and set, you need the `solar_day` struct:
+In case you are interested in computing the daily events such as sunrise and set, you need the `solar_day` struct:
  
     typedef struct solar_day {
     	struct tm ev[11];
@@ -39,12 +39,12 @@ In case you are interested in computing the dayly events such as sunrise and set
     	int status[11];
     } solar_day;
 
-This struct contsins the following elements:
+This struct contains the following elements:
 
 - ev: an array of time structs for all events of the day
 - t: corresponding unix times
-- E: arraw with error values (deviation of solar zenith angle, in rad)
-- status: integer array with statuse flags
+- E: array with error values (deviation of solar zenith angle, in rad)
+- status: integer array with status flags
 
 The solar events are defined and indexed as:
 
@@ -79,14 +79,14 @@ The main routine to compute the real solar position is:
 where:
 
 * `struct tm *ut`: Standard time struct. Should contain UTC values
-* `double *delta_t`: pointer to Δt value, if it is NULL dleta t is determined from internal tables
-* `double delta_ut1`: deviation between terrestial time and UTC (-1.0..1.0 s)
+* `double *delta_t`: pointer to Δt value, if it is NULL Δt is determined from internal tables
+* `double delta_ut1`: deviation between terrestrial time and UTC (-1.0..1.0 s)
 * `double lon`: longitude in radians
 * `double lat`: latitude in radians
 * `double e`: Elevation in m
 
 This computes the _real_ solar position. In practice the solar position is affected by refraction. To 
-compute the aparent position of the sun several routines may be used:
+compute the apparent position of the sun several routines may be used:
 
     sol_pos ApSolposBennet(sol_pos P, double *gdip, double e, double p, double T);
     
@@ -113,7 +113,7 @@ The function returns a time struct representing the true solar time (the only no
 
 * `ut`:	       pointer to time struct with UTC time
 * `delta_t`:   pointer to Δt value, or NULL (use internal tables)
-* `delta_ut1`: delta_ut1 (offset in deconds smaller than 1)
+* `delta_ut1`: delta_ut1 
 * `lon`:	   longitude (in radians)
 * `lat`:	   latitude (in radians)
 
@@ -128,7 +128,7 @@ This returns a solar_day struct. The input is:
 
 * `ut`:	       pointer to time struct with UTC time
 * `delta_t`:   pointer to Δt value, or NULL (use internal tables)
-* `delta_ut1`: delta_ut1 (offset in deconds smaller than 1)
+* `delta_ut1`: delta_ut1 
 * `lon`:       longitude (in radians)
 * `lat`:       latitude (in radians)
 * `e`:         observer elevation (in meter)
@@ -159,16 +159,16 @@ or
 
     SDMASK=0XFF;
 
-which trigges the computation of all 11 solar day events. If one only 
+which triggers the computation of all 11 solar day events. If one only 
 wants to compute sunrise and sunset, one can define:
  
     SDMASK=(_FREESPA_SUNRISE|_FREESPA_SUNSET);
 
-This will save some computational overhead.
+This will can some computational overhead.
 
-Finally freespa offers several utillities to work with time. To work with 
+Finally freespa offers several utilities to work with time. To work with 
 time structs and unix time in a consistent manner with the internally used 
-julian day, freespa defines it won conversion routines:
+Julian day, freespa defines it won conversion routines:
 
     struct tm *gmjtime_r(time_t *t, struct tm *ut);
     struct tm *gmjtime(time_t *t);
@@ -201,34 +201,47 @@ where y is the year, and Δt is in seconds.
 
 ## Differences with NREL spa
 Freespa was developed due to license issues with NREL's spa code. As such 
-the goal was to more or less reimplement NREL spa. Thus the results are 
-generally identical, or very similar. There are some differences in user 
-interface and several details. Some of the behavior of NREL spa I discuss 
-here is not explicitely documented other than in the source code of NREL 
-spa [4].
+the goal was to more or less re-implement NREL spa. Thus the results are 
+generally identical, or very similar. The interface is, however, 
+different (i.e. freespa is _not_ a drop-in replacement). In addition 
+there are some differences in computational details. Some of those 
+details might be considered bugs. Note that some of the behavior of 
+NREL spa discussed here is not explicitly documented but can be found 
+in the source code of NREL spa [4].
  
 One obvious difference is that freespa provides a simple interface to 
-determine Δt values form internal tables, if so desired. With respect to 
-Δt there is another, not so obvious, difference, namely, NREL spa 
-limits the range of acceptable Δt values to +-8000. This seems a rather 
-arbitrary limit that ignores the fact that this limit only holds for 
-the time period 245 -- 3400. Note that the authors of NREL spa claim the
-model is accurate for the period -2000 -- 6000 [5].
+determine Δt values form internal tables, if so desired. It should be 
+noted that NREL spa limits the range of acceptable Δt values to +-8000. 
+This seems a rather arbitrary limit that ignores the fact that this 
+limit only holds for the time period ranging from approximately 
+245 -- 3400 [3]. This is probably fine for most applications. 
+Nevertheless, the authors of NREL spa claim the model is accurate for 
+the period -2000 -- 6000 [5]. 
 
 Both NREL's SPA and freespa can compute sunrise, transit, and sunset. 
 The sunrise/transit/sunset routines in NREL's spa are probably more 
-efficient. However, the accuracy is also low in the sense that I 
-incidentally find offsets in zenith angles of up to 0.1°. One might 
-argue that determining the exact sunrise and set times is always 
-inaccurate due atmospheric refraction effects. However, if there is no 
-need for the model to add its own uncertainties, it should not. Another 
-issue with NREL's spa is that it does not include the geometric dip in 
-determining the sunrise/set times. In NREL spa it is assumed the 
-horizon is always at a 0° elevation angle. Which may not hold for 
-observers at a higher elevation.
+efficient. However, the accuracy of NREL spa is not guaranteed and I 
+incidentally find offsets in zenith angles of up to 0.1°, even when 
+limiting the range of latitudes between -65--65°. One might argue that 
+determining the exact sunrise and set times is always inaccurate due 
+atmospheric refraction effects [2]. On the other hand, I would argue 
+that adding model uncertainties does not help and, in this case, is not 
+hard to avoid (simply check the result and, in necessary improve the 
+answer). 
+
+Another limitation of NREL's spa sunrise/set routine is that it does 
+not compute a sunrise/set event if _one_ of the two events does not 
+happen. For example, for the the first day in a year that the sun does 
+not set at some location (e.g. high up north somewhere in summer), 
+NREL's spa will not compute when the sun rises.
+
+In NREL's spa implementation of an atmospheric refraction model there 
+is no geometric dip. This means that NREL spa always assumes the 
+horizon is at an elevation of 0°. At higher elevation, this assumption 
+may be inaccurate.
 
 In addition to computing sunrise/set times freespa can compute various 
-dawn and dusk times.
+dawn and dusk times (civil, nautical, and astronomical dawn and dusk).
 
 ## References
 [1] Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, Inc., Richmond, Virginia, USA. Pages 105-108

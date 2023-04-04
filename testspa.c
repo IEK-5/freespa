@@ -157,6 +157,7 @@ double AngleBetween(double z1, double a1, double z2, double a2)
 int TestSPA(char *fn)
 {
 	sol_pos P, Pa, Pr, Pra;
+	int Nunread=0;
 	int Et=0, Ec=0;
 	int i,j=0;
 	char line[LLEN];
@@ -180,7 +181,13 @@ int TestSPA(char *fn)
 		if (line[0]=='#')
 			continue;
 		i=sscanf(line,"%ld %lf %lf %lf %lf %lf %lf %lf %lf %lf", &tc, &lat, &lon, &e, &pp, &T, &Pr.a, &Pr.z, &Pra.a, &Pra.z);
-		if (i==10)
+		if (i!=10)
+		{
+			if (Nunread<10)
+				fprintf(stderr,"Warning: failed to read a lines in reference file\n");
+			Nunread++;
+		}
+		else
 		{
 			p=gmtime_r(&tc, &ut);
 			if (p)
@@ -236,11 +243,18 @@ int TestSPA(char *fn)
 			}
 		}
 	}
-	printf("Tested against %d reference solar vectors\n%d errors\n", j, Et);
-	if (Ec)
-		fprintf(stderr,"Warning: %d unix time conversion errors\n", Ec);
 	free(timestr);
 	fclose(f);
+	if (j==0)
+		fprintf(stderr,"Error: testing failed, no readable lines in reference file!\n");
+	else
+	{
+		printf("Tested against %d reference solar vectors\n%d errors\n", j, Et);
+		if (Ec)
+			fprintf(stderr,"Warning: %d unix time conversion errors\n", Ec);
+		if (Nunread)
+			fprintf(stderr,"Warning: Failed to process %d lines\n", Nunread);
+	}
 	return 0;
 }
 #define N 10000

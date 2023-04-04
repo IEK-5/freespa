@@ -810,7 +810,8 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1,
  * and sunset and other related events. Instead of complicated I opt 
  * for simple, modular, and iterative. The iterative makes it easy to
  * be accurate whilst keeping the code clean and simple, it just takes 
- * a bit more time to compute.
+ * a bit more time to compute. This code is much easier to maintain and 
+ * test.
  *  
  * I first compute a local transit time and the previous and next solar 
  * midnights. Using SPA we then find the maximal zenith at the previous
@@ -1081,7 +1082,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	int i;
 	
 	for (i=0;i<11;i++)
-		D.status[i]=EV_NA; 
+		D.status[i]=_FREESPA_EV_NA; 
 	
 	if (InputCheck(delta_ut1, lon, lat, e, p, T))
 		return D;
@@ -1097,7 +1098,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	// previous low
 	put=gmjtime_r(&tp, D.ev);
 	D.t[0]=tp;
-	D.status[0]=EV_OK;
+	D.status[0]=_FREESPA_EV_OK;
 	D.E[0]=NAN;
 	Pp=SPA(put, delta_t, delta_ut1, lon, lat, e);
 	Pp=refract(Pp,gdip,e,p,T);
@@ -1105,7 +1106,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	// current transit
 	put=gmjtime_r(&tc, D.ev+1);
 	D.t[1]=tc;
-	D.status[1]=EV_OK;
+	D.status[1]=_FREESPA_EV_OK;
 	D.E[1]=NAN;
 	Pc=SPA(put, delta_t, delta_ut1, lon, lat, e);
 	Pc=refract(Pc,gdip,e,p,T);
@@ -1113,7 +1114,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	// next low
 	put=gmjtime_r(&tn, D.ev+2);
 	D.t[2]=tn;
-	D.status[2]=EV_OK;
+	D.status[2]=_FREESPA_EV_OK;
 	D.E[2]=NAN;
 	Pn=SPA(put, delta_t, delta_ut1, lon, lat, e);
 	Pn=refract(Pn,gdip,e,p,T);
@@ -1125,7 +1126,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 		if (fabs(dip)>M_PI/2)
 		{
 			for (i=0;i<11;i++)
-				D.status[i]=EV_ERR; 
+				D.status[i]=_FREESPA_EV_ERR; 
 			return D;
 		}
 	}
@@ -1139,13 +1140,13 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 		
 	// compute events
 	i=3;	
-	if (SDMASK&SUNRISE)
+	if (SDMASK&_FREESPA_SUNRISE)
 	{
 		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
-	if (SDMASK&SUNSET)
+	if (SDMASK&_FREESPA_SUNSET)
 	{
 		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
@@ -1153,13 +1154,13 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	i++;
 	
 	dip+=deg2rad(6);
-	if (SDMASK&CVDAWN)
+	if (SDMASK&_FREESPA_CVDAWN)
 	{
 		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
-	if (SDMASK&CVDUSK)
+	if (SDMASK&_FREESPA_CVDUSK)
 	{
 		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
@@ -1167,13 +1168,13 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	i++;
 	
 	dip+=SUN_RADIUS+deg2rad(6);
-	if (SDMASK&NADAWN)
+	if (SDMASK&_FREESPA_NADAWN)
 	{
 		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
-	if (SDMASK&NADUSK)
+	if (SDMASK&_FREESPA_NADUSK)
 	{
 		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
@@ -1181,13 +1182,13 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	i++;
 	
 	dip+=deg2rad(6);
-	if (SDMASK&ASDAWN)
+	if (SDMASK&_FREESPA_ASDAWN)
 	{
 		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
-	if (SDMASK&ASDUSK)
+	if (SDMASK&_FREESPA_ASDUSK)
 	{
 		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
