@@ -1,6 +1,6 @@
 /*
     freespa
-    Copyright (C) 2022  B. E. Pieters,
+    Copyright (C) 2023  B. E. Pieters,
     IEK-5 Photovoltaik, Forschunszentrum Juelich
 
     This program is free software: you can redistribute it and/or
@@ -43,83 +43,26 @@
 #ifndef _FREESPA_H_
 #define _FREESPA_H_
 
+/* see the DOC.md file for documentation */
+
+// some error codes for the error flag in sol_pos
+// errors are be combined with a binary OR
+#define _FREESPA_DET_OOR		0X001	// Δt out of range
+#define _FREESPA_DEU_OOR		0X002	// ΔUT1 out of range
+#define _FREESPA_LON_OOR		0X004	// longitude out of range
+#define _FREESPA_LAT_OOR		0X008	// latitude out of range
+#define _FREESPA_ELE_OOR		0X010	// elevation out of range
+#define _FREESPA_PRE_OOR		0X020	// pressure out of range
+#define _FREESPA_TEM_OOR		0X040	// temperature out of range
+#define _FREESPA_DIP_OOR		0X080	// geometric dip out of range
+#define _FREESPA_GMTIMEF		0X100	// time conversion error 
+
 // container struct for solar position data
 typedef struct sol_pos {
 	double z, a; // zenith, azimuth
 	int E; // error flag
 } sol_pos;
 
-/* SPA routine:
- * returns a solpos struct
- * Input:
- *     ut:	        pointer to time struct with UTC time
- *     delta_t:     pointer to delta_t value, or NULL (use internal tables)
- *     delta_ut1:   delta_ut1 (offset in deconds smaller than 1)
- *     lon:			longitude (in radians)
- *     lat:			latitude (in radians)
- *     e:			observer elevation (in meter)
- */
-sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
-            double lat, double e);   
- 
-/* Aparent Solar Position:
- * computes the aparent position of the sun using refreaction according 
- * to Bennet
- * returns a solpos struct
- * Input:
- *     P:	        real solar position
- *     gdip:		geometric dip, i.e. how far the horizon is below the 
- *                  observer (in rad). If this pointer is NULL the 
- *                  geometric dip is computed from the observer elevation
- *                  (assuming the horizon is at sea level)
- *     e:			observer elevation (in meter)
- *     p:			pressure (in mbar)
- *     T:			Temperature (in °C)
- */ 
- 
-sol_pos AparentSolpos(sol_pos P, double *gdip, double e, double p, double T);
-/* TrueSolarTime routine:
- * returns a tm struct with the local true solar time 
- * 
- * Input:
- *     ut:	        pointer to time struct with UTC time
- *     delta_t:     pointer to delta_t value, or NULL (use internal tables)
- *     delta_ut1:   delta_ut1 (offset in deconds smaller than 1)
- *     lon:			longitude (in radians)
- *     lat:			latitude (in radians)
- * 
- */                   
-struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, 
-						double lon, double lat);
-
-
-/* solar_day: acontainer struct for the solar events of a day. The 
- * events are:
- * 
- * Index	Event
- * 0:		previous low (lowest point of the sun before time t
- * 1:		transit (transit closest to time t
- * 2:		next low (lowest point of the sun after time t)
- * 3:		sunrise
- * 4:		sunset
- * 5:		civil dawn
- * 6:		civil dusk
- * 7:		nautical dawn
- * 8:		nautical dusk
- * 9:		astronomical dawn
- * 10:		astronomical dusk
- * 
- * the array t contsinas corresponding unix times
- * the status array contains:
- * 10		not available
- * 0		OK
- * 1		sun always above (for events with index 3 or higher)
- * -1		sun always below (for events with index 3 or higher)
- * 
- * Note1 the events on a day are the events of a solar-day and thus will 
- *       generally not fall within the same day. 
- * Note2 a solar day may be longer or shorter than 86400 seconds 
- */
 typedef struct solar_day {
 	struct tm ev[11];
 	time_t t[11];
@@ -128,44 +71,42 @@ typedef struct solar_day {
 } solar_day;
 			
 // binary masks to enable/disable computing specific solar day events
-#define SUNRISE 0X1
-#define SUNSET  0X2
-#define CVDAWN  0X4
-#define CVDUSK  0X8
-#define NADAWN  0X10
-#define NADUSK  0X20
-#define ASDAWN  0X40
-#define ASDUSK  0X80
+#define _FREESPA_SUNRISE 0X01
+#define _FREESPA_SUNSET  0X02
+#define _FREESPA_CVDAWN  0X04
+#define _FREESPA_CVDUSK  0X08
+#define _FREESPA_NADAWN  0X10
+#define _FREESPA_NADUSK  0X20
+#define _FREESPA_ASDAWN  0X40
+#define _FREESPA_ASDUSK  0X80
+
 // binary mask variable to configure what solar events SolarDay computes
 // default is all (0XFF)
 extern int SDMASK;
 // status flags
-#define EV_NA        10
-#define EV_OK         0
-#define EV_SUNABOVE   1
-#define EV_SUNBELOW  -1
+#define _FREESPA_EV_ERR       20
+#define _FREESPA_EV_NA        10
+#define _FREESPA_EV_OK         0
+#define _FREESPA_EV_SUNABOVE   1
+#define _FREESPA_EV_SUNBELOW  -1
+// compute the real solar position
+sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
+            double lat, double e);   
+            
+// correct for atmospheric refraction 
+sol_pos ApSolposBennet(sol_pos P, double *gdip, double e, double p, double T);
+sol_pos ApSolposBennetNA(sol_pos P, double *gdip, double e, double p, double T);
 
-/* SolarDay routine:
- * returns a solar_day struct with the events of a day 
- * 
- * Input:
- *     ut:	        pointer to time struct with UTC time
- *     delta_t:     pointer to delta_t value, or NULL (use internal tables)
- *     delta_ut1:   delta_ut1 (offset in deconds smaller than 1)
- *     lon:			longitude (in radians)
- *     lat:			latitude (in radians)
- *     e:			observer elevation (in meter)
- *     gdip:		geometric dip, i.e. how far the horizon is below the 
- *                  observer (in rad). If this pointer is NULL the 
- *                  geometric dip is computed from the observer elevation
- *                  (assuming the horizon is at sea level)
- *     p:			pressure (in mbar)
- *     T:			Temperature (in °C)
- * 
- */   
+// compute true solar time
+struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, 
+						double lon, double lat);
+
+// compute the solar events
+extern int SDMASK;
 solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1, 
                    double lon, double lat, double e, double *gdip, 
-                   double p, double T);
+                   double p, double T, 
+                   sol_pos (*refract)(sol_pos,double*,double,double,double));
 
 // Utilities:
 /* julian unix time routines

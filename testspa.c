@@ -124,7 +124,7 @@ int LogSPA(char *fn, int N)
 		if (p)
 		{
 			P=SPA(p, 0, 0, lon,  lat, e);
-			Pa=AparentSolpos(P,NULL, e, pp, T);
+			Pa=ApSolposBennet(P,NULL, e, pp, T);
 			fprintf(f,"%16ld\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\n", tc, lat,lon,e, pp, T, P.a,P.z,Pa.a, Pa.z);
 		}
 		else
@@ -205,7 +205,7 @@ int TestSPA(char *fn)
 				}
 				else
 				{	
-					Pa=AparentSolpos(P,NULL,e,pp,T);	
+					Pa=ApSolposBennet(P,NULL,e,pp,T);	
 					d=AngleBetween(Pa.z, Pa.a, Pra.z, Pra.a);
 					if (fabs(d)>RAD_EPS)
 					{

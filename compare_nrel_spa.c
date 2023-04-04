@@ -236,7 +236,7 @@ double RandT()
 // spa is allegibly accurate to 0.0003 degrees, i.e. about 5e-6 radians
 // small numerical differences from constant conversions are OK
 #define RAD_EPS 5e-7
-int SpecificTester(time_t tc, double lat, double lon, double E, double p, double T, int verb)
+int SpecificTester(time_t tc, double lat, double lon, double E, double p, double T, int verb, double *err)
 {
 	sol_pos P1, P2, P1a, P2a;
 	int ERR=0;
@@ -248,7 +248,7 @@ int SpecificTester(time_t tc, double lat, double lon, double E, double p, double
 	if (dt>=8000) // NREL's spa has this limit, delta t does not ...
 		dt=0;
 	P1=SPA(ut, &dt, 0, lon,  lat, E);
-	P1a=AparentSolpos(P1,&dip,E,p,T);
+	P1a=ApSolposBennet(P1,&dip,E,p,T); // NREL spa uses Bennet
 	
 	P2=SPA_Wrapper(ut, &dt , 0, lon,  lat, E);
 	P2a=SPA_WrapperApp(ut, &dt , 0, lon,  lat, E, p, T);
@@ -257,6 +257,7 @@ int SpecificTester(time_t tc, double lat, double lon, double E, double p, double
 	d=AngleBetween(P1.z, P1.a, P2.z, P2.a); // note that simply comparing azimuth and zenith has a problem for small zenith angles
 								  // (azimuth has no effect for zenith=0) thus we compute the angle between the two 
 								  // solar vectors	
+	(*err)=fabs(d);
 	if ((fabs(d)>RAD_EPS)||verb)
 	{
 		timestr=malloc(50*sizeof(char));
@@ -270,6 +271,9 @@ int SpecificTester(time_t tc, double lat, double lon, double E, double p, double
 	d=AngleBetween(P1a.z, P1a.a, P2a.z, P2a.a); // note that simply comparing azimuth and zenith has a problem for small zenith angles
 								  // (azimuth has no effect for zenith=0) thus we compute the angle between the two 
 								  // solar vectors
+	if (fabs(d)>(*err))	
+		(*err)=fabs(d);
+		
 	if ((fabs(d)>RAD_EPS)||verb)
 	{
 		timestr=malloc(50*sizeof(char));
@@ -282,7 +286,7 @@ int SpecificTester(time_t tc, double lat, double lon, double E, double p, double
 	}
 	return ERR;
 }
-int RandomTester()
+int RandomTester(double *err)
 {
 	time_t tc;
 	double lat, lon, E, T,p;
@@ -292,7 +296,7 @@ int RandomTester()
 	T=RandT();
 	p=Randp();
 	tc=RandEpoch();
-	return SpecificTester(tc, lat, lon,E,p,T, 0);
+	return SpecificTester(tc, lat, lon,E,p,T, 0, err);
 }
 #define LAT 50.902996388
 #define LON 6.407165038
@@ -326,7 +330,7 @@ double Perf(int Nc, sol_pos (*sparoutine)(struct tm *, double *, double, double,
 
 int main()
 {
-	double t;
+	double t, ee, err;
 	time_t tc;
 	char *curtz = getenv("TZ"); // Make a copy of the timezone variable
 	char *old=NULL;
@@ -344,30 +348,33 @@ int main()
 	
 	
 	srand((unsigned) time(&tc));
-	printf("---------------------------------\n");
-	printf("Testing freespa against NREL spa for %d random inputs:\n", N);
+	printf("--------------------------------------\n");
+	printf("Testing freespa against NREL spa for \n%d random inputs:\n", N);
 	TIC(&t);
+	err=0;
 	for (i=0;i<N;i++)
 	{
-		if ((RandomTester()))
+		if ((RandomTester(&ee)))
 		{
 			fprintf(stderr,"Error: the spa's do not match!\n");
 			NE++;
 		}
+		if (ee>err)
+			err=ee;
 	}
-	printf("tested %d coodinates and times\n", N);
 	printf("%d errors\n", NE);
+	printf("Max deviation %.8f°\n", rad2deg(err));
 	t=TOC(&t);
 	printf("used %f s (%.1f us/test)\n", t, 1e6*t/N);
-	printf("---------------------------------\n\n");
+	printf("--------------------------------------\n\n");
 	
-	printf("---------------------------------\n");
+	printf("--------------------------------------\n");
 	printf("Benchmarking the spa's\n");
 	t=Perf(NN, &SPA);
 	printf("freespa  used %f s (%.1f us/call)\n", t, 1e6*t/NN);
 	t=Perf(NN, &SPA_Wrapper);
 	printf("NREL spa used %f s (%.1f us/call)\n", t, 1e6*t/NN);
-	printf("---------------------------------\n\n");
+	printf("--------------------------------------\n\n");
 	
 	
     if (old)

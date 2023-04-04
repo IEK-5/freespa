@@ -6,49 +6,7 @@ This is a free implementation in c of the Solar Position Algorithm (SPA) [1-2]. 
 Package is not designed to be installed but rather to be inserted in a project. You can add freespa as a submodule to your code.
 
 ## Usage
-The main routine is: 
-
-`sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
-            double lat, double e, double p, double T);`   
-
-where:
-
-* `struct tm *ut`: Standard time struct. Should contain UTC values
-* `double *delta_t`: pointer to delta t value, if it is NULL dleta t is determined from internal tables
-* `double delta_ut1`: deviation between terrestial time and UTC (-1.0..1.0 s)
-* `double lon`: longitude in radians
-* `double lat`: latitude in radians
-* `double e`: Elevation in m
-* `double p`: pressure in mb
-* `double T`: Temperature in C
-
-The return value consists of a data struct:
-
-`typedef struct sol_pos {`
-
-`	double z, a, az, aa; // zenith, azimuth, aparent zenith, aparent azimuth`
-	
-`	int E; // error flag`
-	
-`} sol_pos;`
-
-If the error flag equals 0 all is OK. The double values are the true zenith and azimuth angles (z,a), and the aparant zenith and azimuth (az,aa), including atmospheric refraction effects. All angles are again in radians. 
-
-In addition freespa defines several other routines:
-
- - `struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, double lon, double lat)`
-	- Computes the true solar time for a given coordinate and time struct with UTC time
- - `int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, struct tm *sunrise, struct tm, *transit, struct tm *sunset)`
-	- Computes sunrise, transit, and sunset times
-
-As the implemented SPA routine is accurate over a long period of time, it is useful to extend the unix time concept a bit. To this end freespa reimplements the gmtime and mkgmtime equivalent routines. The freespa routines should, for the present time, be equivalent to the standard routines in time.h. However, freespa's routines consider the 10-day gap between the Julian and Gregorian calendar where the Julian calendar ends on October 4, 1582 (JD = 2299160), and the next day the Gregorian calendar starts on October 15, 1582. The impemented routines are:
-
- - `struct tm *gmjtime_r(time_t *t, struct tm *ut)`
-	- converts unix time to a time struct with UTC (thread safe)
- - `struct tm *gmjtime(time_t *t)`
-	- converts unix time to a time struct with UTC (not thread safe)
- - `time_t mkgmjtime(struct tm *ut)`
-	- converts a time struct with UTC to unix time
+See the user interface documentation in DOC.md.
 
 ## Δt
 For accurate timing the SPA algorithm needs Δt values. Both historic and predicted future values may be obtained here:

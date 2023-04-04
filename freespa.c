@@ -1,6 +1,6 @@
 /*
     freespa
-    Copyright (C) 2022  B. E. Pieters,
+    Copyright (C) 2023  B. E. Pieters,
     IEK-5 Photovoltaik, Forschunszentrum Juelich
 
     This program is free software: you can redistribute it and/or
@@ -72,17 +72,6 @@
 
 #define deg2rad(a) (M_PI*(a)/180.0)
 #define rad2deg(a) (180.0*(a)/M_PI)
-
-// some error codes
-#define DELTA_T_OOR		1
-#define DELTA_UT1_OOR	2
-#define LON_OOR			4
-#define LAT_OOR			8
-#define ELEVATION_OOR	16
-#define PRESS_OOR		32
-#define TEMP_OOR		64
-#define GMTIMEFAIL		128
-
 
 /* structures for internal use */
 typedef struct JulianDate {
@@ -288,7 +277,7 @@ JulianDay MakeJulianDayEpoch(time_t t, double *delta_t, double delta_ut1)
 		JD.JC=0.0;
 		JD.JCE=0.0;
 		JD.JME=0.0;
-		JD.E=GMTIMEFAIL;
+		JD.E=_FREESPA_GMTIMEF;
 	}
 	else
 		JD=MakeJulianDay(&ut, delta_t, delta_ut1);
@@ -418,49 +407,6 @@ void Nutation_lon_obliquity(JulianDay JD, double *del_psi, double *del_eps)
     // actual obliquity computed in the main solpos routine
 }
 
-
-/* Atmospheric Refraction
- * 
- * see 
- * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
- * Inc., Richmond, Virginia, USA.
- * Pages 105-108
- */
-
-/* base form o Bennet's formula *and* that of its approximate reverse
- * i.e. we use the same functional form to compute from the true to 
- * aparent solar position, as we use to compute back.
- */
-static inline double Refr(const double coeff[], double p, double T, double h)
-{
-	//converts true and aparent solar elevation
-	return (p/AP0)*((AT0-ABSOLUTEZERO)/(T-ABSOLUTEZERO))*coeff[0]/tan(h+coeff[1]/(h+coeff[2]));
-}
-
-/* solar refraction according to Bennet
- * Used to convert the aparent solar position into the true solar 
- * position
- */
-static inline double Bennet(double p, double T, double h)
-{
-	const double BENNET[] = {2.9088820866572158e-04,2.2267533386408395e-03,7.6794487087750510e-02};
-	return Refr(BENNET, p, T, h);
-}
-/* solar refraction according to Schaefer
- * Used to convert the true solar position into the aparent solar 
- * position, i.e. the approximate inverse of Bennet.
- * 
- * SCHAEFER, B. E., & LILLER, W. (1990). REFRACTION NEAR THE HORIZON. 
- * Publications of the Astronomical Society of the Pacific, 102(653), 
- * 796–805. http://www.jstor.org/stable/40679565
- */
-static inline double iBennet(double p, double T, double h)
-{
-	const double IBENNET[] = {2.9670597283903603e-04,3.1375594238030984e-03,8.9186324776910242e-02};
-	return Refr(IBENNET, p, T, h);
-}
-
-
 /* solpos - internal routine to compute the solar position
  * input: 
  *  - longitude (lon)
@@ -557,39 +503,6 @@ sol_pos solpos(double lon, double lat, double e, JulianDay JD, GeoCentricSolPos 
 	}
 	return P;
 }
-
-sol_pos AparentSolpos(sol_pos P, double *gdip, double e, double p, double T)
-{
-	double dip, h, dh=0, a_refr;
-	if (gdip)
-		dip=*gdip;
-	else
-		dip=acos(EARTH_R/(EARTH_R+e));
-	
-	// given the aparent solar height at the horizon, what would the 
-	// refraction angle be? The horizon is at -dip
-	a_refr=Bennet(p,T,-dip);
-	h=M_PI/2-P.z;
-	
-	// compute if the sun is visible
-	if (h>=-a_refr-SUN_RADIUS-dip)
-		dh=iBennet(p,T,h);
-		
-	// compute aparent sun zenith
-	P.z=P.z-dh;
-	P.z=fmod(P.z,2*M_PI);
-	if (P.z<0)
-	{
-		P.z=-P.z;
-		P.a=fmod(P.a+M_PI,2*M_PI);
-	}
-	if (P.z>M_PI)
-	{
-		P.z=2*M_PI-P.z;
-		P.a=fmod(P.a+M_PI,2*M_PI);
-	}
-	return P;
-}
 // Equation of Time
 // sun mean longitude polynomial
 const double SMLON[] = {deg2rad(-1/2000000.0),deg2rad(-1/15300.0),deg2rad(1/49931.0),deg2rad(0.03032028),deg2rad(360007.6982779),deg2rad(280.4664567)};
@@ -627,30 +540,30 @@ int InputCheck(double delta_ut1, double lon,
 	int E=0;
 	
 	if (delta_ut1<-1)
-		E|=DELTA_UT1_OOR;
+		E|=_FREESPA_DET_OOR;
 	else if (delta_ut1>1)
-		E|=DELTA_UT1_OOR;
+		E|=_FREESPA_DEU_OOR;
 		
 	if (lon<-M_PI)
-		E|=LON_OOR;
+		E|=_FREESPA_LON_OOR;
 	else if (lon>M_PI)
-		E|=LON_OOR;
+		E|=_FREESPA_LON_OOR;
 		
 	if (lat<-M_PI/2)
-		E|=LAT_OOR;
+		E|=_FREESPA_LAT_OOR;
 	else if (lat>M_PI/2)
-		E|=LAT_OOR;
+		E|=_FREESPA_LAT_OOR;
 	
 	if (e<-EARTH_R)
-		E|=ELEVATION_OOR;
+		E|=_FREESPA_ELE_OOR;
 	
 	if (p<0)
-		E|=PRESS_OOR;
+		E|=_FREESPA_PRE_OOR;
 	if (p>5000)
-		E|=PRESS_OOR;
+		E|=_FREESPA_PRE_OOR;
 		
 	if (T<ABSOLUTEZERO)
-		E|=TEMP_OOR;
+		E|=_FREESPA_TEM_OOR;
 	return E;
 }
 
@@ -669,7 +582,7 @@ int InputCheck(double delta_ut1, double lon,
  *  - T 			Temperature (C)
  * 
  * output:
- *  - sol_pos struct with the real and aparent solar position
+ *  - sol_pos struct with the real solar position
  */
 sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
             double lat, double e)
@@ -684,13 +597,181 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
 		
 		if (D.E)
 		{
-			P.E=D.E;
+			P.E|=D.E;
 			return P;
 		}
 		G=Geocentric_pos(D);
 		P=solpos(lon,lat,e,D,G);
 	}
 	return P;
+}
+
+
+/* Atmospheric Refraction
+ * 
+ * see 
+ * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
+ * Inc., Richmond, Virginia, USA.
+ * Pages 105-108
+ */
+
+/* base form o Bennet's formula *and* that of its approximate reverse
+ * i.e. we use the same functional form to compute from the true to 
+ * aparent solar position, as we use to compute back.
+ */
+static inline double Refr(const double coeff[], double p, double T, double h)
+{
+	//converts true and aparent solar elevation
+	return (p/AP0)*((AT0-ABSOLUTEZERO)/(T-ABSOLUTEZERO))*coeff[0]/tan(h+coeff[1]/(h+coeff[2]));
+}
+
+/* solar refraction according to Bennet
+ * Used to convert the aparent solar position into the true solar 
+ * position
+ */
+static inline double Bennet(double p, double T, double h)
+{
+	const double BENNET[] = {2.9088820866572158e-04,2.2267533386408395e-03,7.6794487087750510e-02};
+	return Refr(BENNET, p, T, h);
+}
+/* solar refraction according to Saemundsson
+ * Used to convert the true solar position into the aparent solar 
+ * position, i.e. the approximate inverse of Bennet.
+ * 
+ * Note I did not get a hold of the original publication, only the 
+ * reproduced equation in 
+ * 
+ * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
+ * Inc., Richmond, Virginia, USA.
+ * 
+ * Here the original equation is attributed to:
+ * 
+ * Saemundsson, Thorsteinn, "Atmospheric Refraction", Sky and 
+ * Telescope, Vol 72, No. 1, page 70
+ */
+static inline double iBennet(double p, double T, double h)
+{
+	const double IBENNET[] = {2.9670597283903603e-04,3.1375594238030984e-03,8.9186324776910242e-02};
+	/* B. Pieters 04.04.2023
+	 * 
+	 * following coefficients were determined on some arbitrary Tuesday 
+	 * morning and appeared to provide a more accurate inverse Bennet 
+	 * function. You can use it if you want but I suppose we better 
+	 * stick to the published one above, or the BennetNA functions
+	 * const double IBENNET[] = {2.5506322825243782e-04,2.7177487894134013e-03,8.9352063972327561e-02};
+	 */
+	return Refr(IBENNET, p, T, h);
+}
+
+/* Modified Bennet accoding to Hohenkerk
+ * 
+ * Equation published in:
+ * Wilson, Teresa, "Evaluating the Effectiveness of Current Atmospheric 
+ * Refraction Models in Predicting Sunrise and Sunset Times", Open 
+ * Access Dissertation, Michigan Technological University, 2018.
+ * https://doi.org/10.37099/mtu.dc.etdr/697
+ * 
+ * on page 26, Eq. 2.8. 
+ * 
+ * Wilson in turn attributes this to Hohenkerk:
+ * Hohenkerk, C. Refraction: Bennetts Refraction Formulae, updated for 
+ * use in The Nautical Almanac 2005 Onwards Internal memo, unpublished, 
+ * HMNAO, Chilton, UK: Rutherford Appleton Laboratory, 2003.
+ * 
+ */
+static inline double BennetNA(double p, double T, double h)
+{
+	const double BENNET[] = {2.9088820866572158e-04,2.2297995128387070e-03,7.5398223686155036e-02};
+	return Refr(BENNET, p, T, h);
+}
+/* Approximate Inverse of BennetNA (own fit)
+ */
+static inline double iBennetNA(double p, double T, double h)
+{
+	const double IBENNET[] = {2.5561812083991283e-04,2.8037159466528061e-03,8.9542023921733521e-02};
+	return Refr(IBENNET, p, T, h);
+}
+
+/* ApSolpos - correct for atmospheric refraction
+ * input: 
+ *  - refr. model	function pointer taking pressure, time, and aparent 
+ * 					solar altitude. 
+ *  - irefr.model	(approximate) inverse of above model
+ *  - P 			Solar position struct with the real solar position 
+ *  - gdip			pointer to a geometric dip value. If NULL the 
+ * 					geometric dip is computed from the elevation 
+ * 					assuming the horizon is at sea level (only if the 
+ * 					elevation > 0)
+ *  - e				observer elevation (m)
+ *  - p				atmospheric pressure (mb)
+ *  - T 			Temperature (C)
+ * 
+ * output:
+ *  - sol_pos struct with the aparent solar position
+ */
+sol_pos ApSolpos(double (*refr)(double, double, double), double (*irefr)(double, double, double), sol_pos P, double *gdip, double e, double p, double T)
+{
+	double dip, h, dh=0, a_refr;
+	P.E=InputCheck(0, 0, 0, e, p, T);
+	if (gdip)
+	{
+		dip=*gdip;
+		if (fabs(dip)>M_PI/2)
+			P.E|=_FREESPA_DIP_OOR;
+	}
+	else
+	{
+		/* this Eq. for dip only holds for positive elevations!
+		 * if you need a negative dip (you are in a pit) you need to
+		 * provide your own dip value as I do not know how far the
+		 * rim of the pit is...
+		 * You can use the gdip pointer for that.
+		 */
+		dip=0;
+		if (e>0)
+			dip=acos(EARTH_R/(EARTH_R+e));
+	}
+	if (P.E)
+	{
+		P.z=0;
+		P.a=0;
+		return P;
+	}	
+	// given the aparent solar height at the horizon, Bennet gives the 
+	// refraction angle
+	a_refr=refr(p,T,-dip);
+	h=M_PI/2-P.z;
+	
+	// compute if the sun is visible
+	if (h>=-a_refr-SUN_RADIUS-dip)
+		dh=irefr(p,T,h);
+		
+	// compute aparent sun zenith
+	P.z=P.z-dh;
+	P.z=fmod(P.z,2*M_PI);
+	if (P.z<0)
+	{
+		P.z=-P.z;
+		P.a=fmod(P.a+M_PI,2*M_PI);
+	}
+	if (P.z>M_PI)
+	{
+		P.z=2*M_PI-P.z;
+		P.a=fmod(P.a+M_PI,2*M_PI);
+	}
+	return P;
+}
+/* Exported functions for atmospheric refraction. */
+// original Bennet
+sol_pos ApSolposBennet(sol_pos P, double *gdip, double e, double p, double T)
+{
+	return ApSolpos(&Bennet, &iBennet, P, gdip, e, p, T);
+}
+
+// modified Bennet
+sol_pos ApSolposBennetNA(sol_pos P, double *gdip, double e, double p, double T)
+{
+	return ApSolpos(&BennetNA, &iBennetNA, P, gdip, e, p, T);
 }
 
 /* TrueSolarTime - exported routine to convert UTC to the local solar time
@@ -725,12 +806,11 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1,
 }
 
 /* Computing the Solar Day Events
- * there is no doubt aa more efficient way to compute this. I suppose
- * NREL SPA is more efficient too (but not as accurate). Furthermore,
- * it is more complicated. I choose simple slow and accurate over 
- * complicated fast and less accurate. The less accurate may be 
- * solvable but probably making it more complicated again, so sod it,
- * keep it simple.
+ * I got tired of all those complicated algorithms to compute sunrise 
+ * and sunset and other related events. Instead of complicated I opt 
+ * for simple, modular, and iterative. The iterative makes it easy to
+ * be accurate whilst keeping the code clean and simple, it just takes 
+ * a bit more time to compute.
  *  
  * I first compute a local transit time and the previous and next solar 
  * midnights. Using SPA we then find the maximal zenith at the previous
@@ -852,7 +932,9 @@ time_t FindSolTime(time_t t, int hour, int min, int sec, double *delta_t,
 #define Z_MAXITER 100
 int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t, 
                   double delta_ut1, double lon, double lat, double e, double *gdip, 
-                  double p, double T, double z, time_t *tz, double *E)
+                  double p, double T, 
+                  sol_pos (*refract)(sol_pos,double*,double,double,double), 
+                  double z, time_t *tz, double *E)
 {
 	double a, b, w, R;
 	sol_pos P;
@@ -897,7 +979,7 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	tt=t1+(time_t)round(acos(z/b-a/b)/w);
 	put=gmjtime_r(&tt, &ut);
 	P=SPA(put, delta_t, delta_ut1, lon, lat, e);
-	P=AparentSolpos(P,gdip,e,p,T);
+	P=refract(P,gdip,e,p,T);
 	tb=tt;
 	eb=P.z-z;
 	if (fabs(P.z-z)<Z_EPS)
@@ -932,7 +1014,7 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 			tt=(tmin+tmax)/2;
 		put=gmjtime_r(&tt, &ut);
 		P=SPA(put, delta_t, delta_ut1, lon, lat, e);
-		P=AparentSolpos(P,gdip,e,p,T);
+		P=refract(P,gdip,e,p,T);
 		if (fabs(P.z-z)<fabs(eb))
 		{
 			eb=P.z-z;
@@ -963,23 +1045,33 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	return 0;
 }
 
-/* events must me an array of tm structs of length 11. It shall contain
- * previous low
- * transit
- * next low
- * sunrise
- * sunset
- * civil dawn
- * civil dusk
- * nautical dawn
- * nautical dusk
- * astronomical dawn
- * astronomical dusk
+/* solar_day strcut lists 11 solar events on a day
+ * Index	Event
+ * 0:		solar midnight before time t
+ * 1:		solar transit closest to time t
+ * 2:		solar midnight after time t
+ * 3:		sunrise
+ * 4:		sunset
+ * 5:		civil dawn
+ * 6:		civil dusk
+ * 7:		nautical dawn
+ * 8:		nautical dusk
+ * 9:		astronomical dawn
+ * 10:		astronomical dusk
+ * The followin routine finds em.
  */
-int SDMASK=(SUNRISE|SUNSET|CVDAWN|CVDUSK|NADAWN|NADUSK|ASDAWN|ASDUSK);
+/* binary mask to enable/disable computing specific events
+ * i.e. if you only care about sunrise and sunset you may set it to:
+ * SDMASK=(_FREESPA_SUNRISE|_FREESPA_SUNSET);
+ * and save some computational effort for the rest
+ * Note the solar midnight before, solar transit, and solar midnight 
+ *      after, are always computed.
+ */
+int SDMASK=(_FREESPA_SUNRISE|_FREESPA_SUNSET|_FREESPA_CVDAWN|_FREESPA_CVDUSK|_FREESPA_NADAWN|_FREESPA_NADUSK|_FREESPA_ASDAWN|_FREESPA_ASDUSK);
 solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1, 
                    double lon, double lat, double e, double *gdip, 
-                   double p, double T)
+                   double p, double T, 
+                   sol_pos (*refract)(sol_pos,double*,double,double,double))
 {
 	solar_day D={0};
 	time_t t, tp, tc, tn;
@@ -1008,7 +1100,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	D.status[0]=EV_OK;
 	D.E[0]=NAN;
 	Pp=SPA(put, delta_t, delta_ut1, lon, lat, e);
-	Pp=AparentSolpos(Pp,gdip,e,p,T);
+	Pp=refract(Pp,gdip,e,p,T);
 	
 	// current transit
 	put=gmjtime_r(&tc, D.ev+1);
@@ -1016,7 +1108,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	D.status[1]=EV_OK;
 	D.E[1]=NAN;
 	Pc=SPA(put, delta_t, delta_ut1, lon, lat, e);
-	Pc=AparentSolpos(Pc,gdip,e,p,T);
+	Pc=refract(Pc,gdip,e,p,T);
 	
 	// next low
 	put=gmjtime_r(&tn, D.ev+2);
@@ -1024,26 +1116,38 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	D.status[2]=EV_OK;
 	D.E[2]=NAN;
 	Pn=SPA(put, delta_t, delta_ut1, lon, lat, e);
-	Pn=AparentSolpos(Pn,gdip,e,p,T);
+	Pn=refract(Pn,gdip,e,p,T);
 	
 	// geometric dip
 	if (gdip)
+	{
 		dip=*gdip;
+		if (fabs(dip)>M_PI/2)
+		{
+			for (i=0;i<11;i++)
+				D.status[i]=EV_ERR; 
+			return D;
+		}
+	}
 	else
-		dip=acos(EARTH_R/(EARTH_R+e));
+	{
+		dip=0;
+		if (e>0)
+			dip=acos(EARTH_R/(EARTH_R+e));
+	}
 		
 		
 	// compute events
 	i=3;	
 	if (SDMASK&SUNRISE)
 	{
-		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
 	if (SDMASK&SUNSET)
 	{
-		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2+SUN_RADIUS, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
@@ -1051,13 +1155,13 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	dip+=deg2rad(6);
 	if (SDMASK&CVDAWN)
 	{
-		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
 	if (SDMASK&CVDUSK)
 	{
-		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
@@ -1065,13 +1169,13 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	dip+=SUN_RADIUS+deg2rad(6);
 	if (SDMASK&NADAWN)
 	{
-		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
 	if (SDMASK&NADUSK)
 	{
-		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
@@ -1079,581 +1183,19 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	dip+=deg2rad(6);
 	if (SDMASK&ASDAWN)
 	{
-		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tp, tc, Pp.z, Pc.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
 	if (SDMASK&ASDUSK)
 	{
-		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, dip+M_PI/2, D.t+i, D.E+i);
+		D.status[i]=FindSolZenith(tc, tn, Pc.z, Pn.z, delta_t, delta_ut1, lon, lat, e, gdip, p, T, refract, dip+M_PI/2, D.t+i, D.E+i);
 		put=gmjtime_r(D.t+i, D.ev+i);
 	}
 	i++;
 	return D;
 	
 }
-
-
-
-/* SunTimes_nrel - NREL's algorithm (see documentation at 
- * https://midcdmz.nrel.gov/spa/)
- * Makes an approximate guess and does one (Newton?) step to refine the 
- * solution. Routine ignores observer elevation and does not verify its 
- * results (i.e. the error is not evaluated).
- * 
- * freespa uses this routine for a first solution and use iterative 
- * solvers to refine the solution further, if needed. This way freespa
- * corrects for observer elevation and is generally more accurate.
- * 
- * input: 
- *  - ut			time struct with UTC. Only used for the date (year, 
- * 					month, day)
- *  - delta_t		pointer to Δt value, the difference between the 
- *                  Earth rotation time and the Terrestrial Time. If 
- * 					the pointer is NULL, use internal tables to find Δt.
- *  - delta_ut1 	is a fraction of a second that is added to the UTC 
- * 					to adjust for the irregular Earth rotation rate.
- *  - lon			observer longitude (radians)
- *  - lat 			observer latitude (radians)
- *  - p				atmospheric pressure (mb)
- *  - T 			Temperature (C)
- * 
- * output:
- *  - tm structs sunrise, transit, and sunset
- * 
- * return value:
- * 	-1				Polar night. Only transit is computed.
- *  0				Regular day/night, all times are computed.
- *  1				Midnight sun. Only transit is computed.
- */
-double ablim(double a)
-{
-// weird to limit these deltas to 1/2 degrees, or?
-//#define ALIM 2*M_PI
-//#define AALIM M_PI
-#define ALIM deg2rad(10)
-#define AALIM deg2rad(5)
-	if (fabs(a)>ALIM)
-	{
-		if (a<0)
-			a+=2*M_PI;
-		a=fmod(a,AALIM);
-	}
-	return a;
-}
-
-
-int SunTimes_nrel(struct tm ut, double dipg, double *delta_t, double delta_ut1, double lon, double lat, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
-{
-	double dtau, vv, v[3], H,Hp[3];
-	double lambda, alpha[3], delta[3];
-	double dpsi, deps, eps;
-	double h[3], a_refr, arg;
-	double m[3], n, alphap[3], deltap[3], a,b,c,ap,bp,cp;
-	JulianDay Day[3];
-	GeoCentricSolPos GP;
-	int i;
-	
-	
-	ut.tm_hour=0;
-	ut.tm_min=0;
-	ut.tm_sec=0;
-	
-	Day[1]=MakeJulianDay(&ut, delta_t, delta_ut1);
-	Day[0]=AddDays(Day[1], -1);
-	Day[2]=AddDays(Day[1], 1);
-	
-	for (i=0;i<3;i++)
-	{
-		GP=Geocentric_pos(Day[i]);
-		// aberation correction
-		dtau=deg2rad(-20.4898/3600.0)/GP.rad;
-		
-		// nutation and the obliquity of the ecliptic
-		Nutation_lon_obliquity(Day[i], &dpsi, &deps);
-		eps=deps+poly(ECLIPTIC_MEAN_OBLIQUITY,11,Day[i].JME/10)*deg2rad(1/3600.0);
-		
-		// aparent sun longitude
-		lambda=GP.lon+dpsi+dtau;
-		
-		// sun right ascension
-		alpha[i]=atan2(sin(lambda)*cos(eps)-tan(GP.lat)*sin(eps),cos(lambda));
-		if (alpha[i]<0)
-			alpha[i]+=2*M_PI;
-			
-		// sun declination
-		delta[i]=asin(sin(GP.lat)*cos(eps)+cos(GP.lat)*sin(eps)*sin(lambda));
-		if (i==1)
-		{
-			// sidereal time at Greenwich 
-			vv=poly(GSTA,4,Day[i].JC)+deg2rad(360.98564736629)*(Day[i].JD - JD0);
-			vv+=dpsi*cos(eps);
-			vv=fmod(vv, 2*M_PI);
-			if (vv<0)
-				vv+=2*M_PI;
-		}
-	}
-	// approximate solar transit time in radians
-	m[0]=(alpha[1]-lon-vv);
-	a_refr=-Bennet(p,T,0.0)-SUN_RADIUS-dipg;
-	arg=(sin(a_refr)-sin(lat)*sin(delta[1]))/(cos(lat)*cos(delta[1]));
-	// test if we have a regular sunrise/sunset
-	if ((arg>-1) && (arg<1))
-	{
-		// approximate sun rise and set times in radians
-		H=fmod(acos((sin(a_refr)-sin(lat)*sin(delta[1]))/(cos(lat)*cos(delta[1]))), M_PI);
-		m[1]=m[0]-H;
-		m[2]=m[0]+H;
-		
-		// refine the computed times
-		a=alpha[1]-alpha[0];
-		b=alpha[2]-alpha[1];
-		ap=delta[1]-delta[0];
-		bp=delta[2]-delta[1];
-		a=ablim(a);
-		b=ablim(b);
-		ap=ablim(ap);
-		bp=ablim(bp);
-		c=b-a;
-		cp=bp-ap;
-		
-		for (i=0;i<3;i++)
-		{
-			m[i]=fmod(m[i],2*M_PI)/(2*M_PI);
-			if (m[i]<0)
-				m[i]+=1.0;		
-			v[i]=vv+deg2rad(360.985647)*m[i];
-			n=m[i];
-			alphap[i]=alpha[1]+n*(a+b+c*n)/2;
-			deltap[i]=delta[1]+n*(ap+bp+cp*n)/2;
-			Hp[i]=fmod(v[i]+lon-alphap[i], 2*M_PI);
-			if (Hp[i]<=-M_PI)
-				Hp[i]+=2*M_PI;
-			if (Hp[i]>=M_PI)
-				Hp[i]-=2*M_PI;			
-			h[i]=asin(sin(lat)*sin(deltap[i])+cos(lat)*cos(deltap[i])*cos(Hp[i]));
-		}
-		Day[0].JD=Day[1].JD;
-		Day[2].JD=Day[1].JD;
-		Day[1].JD+=m[0]-Hp[0]/2/M_PI;
-		Day[0].JD+=m[1]+(h[1]-a_refr)/2/M_PI/cos(deltap[1])/cos(lat)/sin(Hp[1]);
-		Day[2].JD+=m[2]+(h[2]-a_refr)/2/M_PI/cos(deltap[2])/cos(lat)/sin(Hp[2]);
-		
-		// noon is computed for the given date
-		// sunrise must be before that time and sunset after
-		if (Day[0].JD>Day[1].JD)
-			Day[0].JD-=1.0;
-		if (Day[1].JD>Day[2].JD)
-			Day[2].JD+=1.0;
-			
-		// populate the tm structs
-		JDgmtime(Day[0],sunrise);
-		JDgmtime(Day[1],transit);
-		JDgmtime(Day[2],sunset);
-		return 0;
-	}
-	else
-	{
-		// no sunrise and sunset
-		// refine the computed solar noon
-		a=alpha[1]-alpha[0];
-		b=alpha[2]-alpha[1];
-		ap=delta[1]-delta[0];
-		bp=delta[2]-delta[1];
-		a=ablim(a);
-		b=ablim(b);
-		ap=ablim(ap);
-		bp=ablim(bp);
-		c=b-a;
-		cp=bp-ap;
-		m[0]=fmod(m[0],2*M_PI)/(2*M_PI);
-		if (m[0]<0)
-			m[0]+=1.0;		
-		v[0]=vv+deg2rad(360.985647)*m[0];
-		n=m[0];
-		alphap[0]=alpha[1]+n*(a+b+c*n)/2;
-		deltap[0]=delta[1]+n*(ap+bp+cp*n)/2;
-		Hp[0]=fmod(v[0]+lon-alphap[0], 2*M_PI);
-		if (Hp[0]<=-M_PI)
-			Hp[0]+=2*M_PI;
-		if (Hp[0]>=M_PI)
-			Hp[0]-=2*M_PI;
-		h[0]=asin(sin(lat)*sin(deltap[0])+cos(lat)*cos(deltap[0])*cos(Hp[0]));			
-		
-		// only the transit time is valid
-		// the sunrise and sunset times are set as min/max bounds
-		// to aid iterative refinement 
-		Day[1].JD+=m[0]-Hp[0]/2/M_PI;
-		Day[0]=AddDays(Day[1], -1);
-		Day[2]=AddDays(Day[1], 1);
-		JDgmtime(Day[0],sunrise);
-		JDgmtime(Day[1],transit);
-		JDgmtime(Day[2],sunset);
-		// polar night (-1) or midnight sun (+1)?
-		return 2*(h[0]>0)-1;
-	}
-}
-
-/* In case the NREL algorithm is inaccurate we can iteratively improve 
- * the solution. I should study NREL's algorithm and try to make a good 
- * solution. However, out of lazyness I for now settle for inefficient 
- * bisection.
- */ 
-// return the elevation of the sun in radians for time t
-double SunRiseSetErr(time_t t, double dip, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
-{
-	sol_pos P;
-	struct tm ut={0}, *put;
-	put=gmjtime_r(&t, &ut);
-	P=SPA(put, delta_t, delta_ut1, lon, lat, e);
-	P=AparentSolpos(P,NULL,e,p,T);
-	return P.z-M_PI/2-SUN_RADIUS-dip;
-}
-// return the error in transit angle in radians for time t
-double SunTransitErr(time_t t, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T)
-{
-	sol_pos P;
-	struct tm ut={0}, *put;
-	put=gmjtime_r(&t, &ut);
-	P=SPA(put, delta_t, delta_ut1, lon, lat, e);
-	P=AparentSolpos(P,NULL,e,p,T);
-	return atan(sin(P.a)*fabs(tan(P.z))); // angle with the plane x=0;
-}
-
-/* bisection algorithms:
- * Bisection routines use a temperal resolution of 1 second
- * i.e., it will not refine a solution beyond a second resolution, even 
- * if angles are off more than the given eps
- * This way the routines are guaranteed to finish
- */ 
-
-time_t BisectSunRise(struct tm *sunrise, struct tm *transit, double dipg, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
-{
-	time_t tmin, tmax, t, to;
-	double E, Emin, Emax, Eo;
-	
-	(*Err)=0;
-	t=mkgmjtime(sunrise);
-	E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-	to=t;
-	Eo=fabs(E);
-	if (E>0)
-	{
-		tmin=t;
-		Emin=E;
-	
-		tmax=t+600; // probably within the next 10 min
-		Emax=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (Emax>0)
-		{
-			if (fabs(Emin)<Eo)
-			{
-				to=tmin;
-				Eo=fabs(Emin);
-			}
-			tmax=mkgmjtime(transit);
-			Emax=SunRiseSetErr(tmax, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		}
-		if (fabs(Emax)<Eo)
-		{
-			to=tmax;
-			Eo=fabs(Emax);
-		}
-		if (Emax>0)
-		{
-			//printf("sunrise non bracketet tmax\n");
-			(*Err)=1;
-			return to;
-		}
-	}
-	else
-	{
-		tmax=t;
-		Emax=E;	
-	
-		tmin=t-600; // probably within the previous 10 min
-		Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (Emin<0)
-		{
-			// OK, then let us make one big step back
-			if (fabs(Emin)<Eo)
-			{
-				to=tmin;
-				Eo=fabs(Emin);
-			}
-			tmin=mkgmjtime(transit)-43200;
-			Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		}
-		if (fabs(Emin)<Eo)
-		{
-			to=tmin;
-			Eo=fabs(Emin);
-		}
-		if (Emin<0)
-		{
-			//printf("sunsise non bracketet tmin\n");
-			(*Err)=1;
-			return to;
-		}
-	}
-	
-	while ((Eo>eps)&&(tmax-tmin>1))
-	{
-		t=(tmax+tmin)/2;
-		E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (E>0)
-		{
-			tmin=t;
-			Emin=E;
-		}
-		else
-		{
-			tmax=t;
-			Emax=E;
-		}
-		if (fabs(E)<Eo)
-		{
-			to=t;
-			Eo=fabs(E);
-		}
-	}
-	return to;
-}
-			
-
-time_t BisectSunSet(struct tm *sunset, struct tm *transit, double dipg, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
-{
-	
-	time_t tmin, tmax, t, to;
-	double E, Emin, Emax, Eo;
-	
-	(*Err)=0;
-	t=mkgmjtime(sunset);
-	E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-	to=t;
-	Eo=fabs(E);
-	if (E<0)
-	{
-		tmin=t;
-		Emin=E;	
-	
-		tmax=t+600; // probably within the next 10 min
-		Emax=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (Emax<0)
-		{
-			if (fabs(Emin)<Eo)
-			{
-				to=tmin;
-				Eo=fabs(Emin);
-			}
-			tmax=mkgmjtime(transit)+43200;
-			Emax=SunRiseSetErr(tmax, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		}
-		if (fabs(Emax)<Eo)
-		{
-			to=tmax;
-			Eo=fabs(Emax);
-		}
-		if (Emax<0)
-		{
-			//printf("sunset non bracketet tmax\n");
-			(*Err)=1;
-			return to;
-		}
-	}
-	else
-	{
-		tmax=t;
-		Emax=E;
-		tmin=t-600; // probably within the previous 10 min
-		Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (Emin>0)
-		{
-			// OK, then let us make one big step back
-			if (fabs(Emin)<Eo)
-			{
-				to=tmin;
-				Eo=fabs(Emin);
-			}
-			tmin=mkgmjtime(transit);
-			Emin=SunRiseSetErr(tmin, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		}
-		if (fabs(Emin)<Eo)
-		{
-			to=tmin;
-			Eo=fabs(Emin);
-		}
-		if (Emin>0)
-		{
-			//printf("sunset non bracketet tmin\n");
-			(*Err)=1;
-			return to;
-		}
-	}
-	
-	E=Eo;
-	while ((Eo>eps)&&(tmax-tmin>1))
-	{
-		t=(tmax+tmin)/2;
-		E=SunRiseSetErr(t, dipg, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (E>0)
-		{
-			tmax=t;
-			Emax=E;
-		}
-		else
-		{
-			tmin=t;
-			Emin=E;
-		}
-		if (fabs(E)<Eo)
-		{
-			to=t;
-			Eo=fabs(E);
-		}
-	}
-	return to;
-}
-
-time_t BisectTransit(struct tm *sunrise, struct tm *transit,struct tm *sunset, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, double eps, int *Err)
-{
-	time_t tmin, tmax, t, to;
-	double E, Eo;
-
-	(*Err)=0;
-	t=mkgmjtime(transit);
-	E=SunTransitErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
-	to=t;
-	Eo=fabs(E);
-	if (E>0)
-	{
-		tmin=t;
-		tmax=mkgmjtime(sunset);
-		E=SunTransitErr(tmax, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (fabs(E)<Eo)
-		{
-			to=tmax;
-			Eo=fabs(E);
-		}
-		if (E>0)
-		{
-			//printf("transit non bracketet tmax\n");
-			(*Err)=1;
-			return to;
-		}
-	}
-	else
-	{
-		tmax=t;
-		tmin=mkgmjtime(sunrise);
-		E=SunTransitErr(tmin, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (fabs(E)<Eo)
-		{
-			to=tmin;
-			Eo=fabs(E);
-		}
-		if (E<0)
-		{
-			//printf("transit non bracketet tmin\n");
-			(*Err)=1;
-			return to;
-		}
-	}
-	
-	E=Eo;
-	while ((fabs(E)>eps)&&(tmax-tmin>1))
-	{
-		t=(tmax+tmin)/2;
-		E=SunTransitErr(t, delta_t, delta_ut1, lon, lat, e, p, T);
-		if (E>0)
-			tmin=t;
-		else
-			tmax=t;
-		if (fabs(E)<Eo)
-		{
-			Eo=fabs(E);
-			to=t;
-		}
-	}
-	return to;
-}
-
-/* SunTimes - exported routine for the solar times
- * Uses the NREL algorithm as a first guess and interatively improves it
- * if needed. Alos includes the effects of observer elevation. 
- * input: 
- *  - ut			time struct with UTC. Only used for the date (year, 
- * 					month, day)
- *  - delta_t		pointer to Δt value, the difference between the 
- *                  Earth rotation time and the Terrestrial Time. If 
- * 					the pointer is NULL, use internal tables to find Δt.
- *  - delta_ut1 	is a fraction of a second that is added to the UTC 
- * 					to adjust for the irregular Earth rotation rate.
- *  - lon			observer longitude (radians)
- *  - lat 			observer latitude (radians)
- *  - e 			observer elevation (m)
- *  - p				atmospheric pressure (mb)
- *  - T 			Temperature (C)
- * 
- * output:
- *  - tm structs sunrise, transit, and sunset
- * 
- * return value:
- * 	-1				Polar night. Only transit is computed.
- *  0				Regular day/night, all times are computed.
- *  1				Midnight sun. Only transit is computed.
- *  10				Don't trust the results
- */
-/* The maximum angular rate of the sun in the sky is:
- * 360/24/24=0.00417°/s
- * Thus one expects that determining the sun rise/set time at this accuracy should work.
- * However, turns out atmospheric refrectionb spoils this a bit and I often see 
- * more than 10 times that angular rate when computing sun rise and set times
- * For this reason we settle 0.05°
- */
-#define ST_EPS deg2rad(0.05)
-int SunTimes(struct tm ut, double *delta_t, double delta_ut1, double lon, double lat, double e, double p, double T, struct tm *sunrise, struct tm *transit, struct tm *sunset)
-{
-	time_t t;
-	int r, E;
-	double dipg; // geometric dip
-	
-	dipg=acos(EARTH_R/(EARTH_R+e));	
-	r=SunTimes_nrel(ut, dipg, delta_t, delta_ut1, lon, lat, p, T, sunrise, transit, sunset);
-	
-	if (r==0)
-	{
-		int rr=0;
-		t=BisectSunRise(sunrise, transit, dipg, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);		
-		gmjtime_r(&t,sunrise);
-		rr+=E;
-		t=BisectSunSet(sunset, transit, dipg, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
-		gmjtime_r(&t,sunset);
-		rr+=E;
-		t=BisectTransit(sunrise, transit, sunset, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
-		gmjtime_r(&t,transit);
-		rr+=E;
-		//if (E>0)
-		//	return 10; // does this ever happen?
-		return 0;
-	}
-	else
-	{
-		sol_pos P;
-		t=BisectTransit(sunrise, transit, sunset, delta_t, delta_ut1, lon, lat, e, p, T, ST_EPS, &E);
-		gmjtime_r(&t,transit);
-		
-		P=SPA(transit, delta_t, delta_ut1, lon, lat, e);
-		P=AparentSolpos(P,&dipg,e,p,T);
-		if (P.z>M_PI/2)
-			return -1;
-		else
-			return 1;
-	}
-}	
-	
-
-
 
 /* some unit tests */
 // unit test julian date computation with a table of dates

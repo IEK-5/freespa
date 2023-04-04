@@ -185,13 +185,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	spa.function=SPA_ZA_RTS;
 	spa_calculate(&spa);
 	if ((spa.sunrise<0)||(spa.sunset<0)||(spa.suntransit<0))
-	{
-		if ((spa.latitude<67.9)&&(spa.latitude>-67.9))
-			return D;
-		if (spa.zenith<90)
-			return D;		
 		return D;
-	}
 	
 	ut->tm_hour=0;
 	ut->tm_min=0;
@@ -265,6 +259,8 @@ int main(int argc, char **argv)
 	int tsoltime=0, solpos=1, suntimes=0;	
 	// per default we use the current time
 	time_t tc=time(NULL);
+	sol_pos (*aparent)(sol_pos,double*,double, double, double)=&ApSolposBennet;
+	
 	
 	struct tm ut={0};
 	struct tm lst={0};
@@ -286,11 +282,12 @@ int main(int argc, char **argv)
 			{"solpos",            no_argument, 0, 'S'},
 			{"suntimes",          no_argument, 0, 'r'},
 			{"nrel",              no_argument, 0, 'N'},
+			{"bennet-NA",         no_argument, 0, 'A'},
 			{"help",              no_argument, 0, 'h'},
 			{0, 0, 0, 0}
 		};
 		int option_index = 0;
-		c = getopt_long (argc, argv, "c:e:p:T:t:sSrNh",long_options, &option_index);
+		c = getopt_long (argc, argv, "c:e:p:T:t:sSrNAh",long_options, &option_index);
 		if (c == -1)
 			break;
 			
@@ -366,6 +363,9 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Warning: --nrel (-N) NREL spa is not available!\n");
 				fprintf(stderr, "Note: NREL spa must be available at compile time\n");
 #endif
+				break;
+			case 'A':
+				aparent=&ApSolposBennetNA;
 				break;
 			case 'h':
 			{
@@ -452,13 +452,13 @@ int main(int argc, char **argv)
 		if (fspa==1)
 		{
 			P=SPA(p, NULL, 0, lon,  lat, E);
-			Pa=AparentSolpos(P, NULL, E, Pr, Temp);
+			Pa=aparent(P, NULL, E, Pr, Temp);
 		}
 #ifdef NRELSPA
 		else
 		{
 			P=NREL_SPA(p, NULL, 0, lon,  lat, E);
-			Pa=AparentSolpos(P, NULL, E, Pr, Temp);
+			Pa=aparent(P, NULL, E, Pr, Temp);
 		}
 #endif
 		printf("| Solar Position ----------------------\n");
@@ -474,7 +474,7 @@ int main(int argc, char **argv)
 		int i;
 		printf("| Solar Day Events---------------------\n");
 		if (fspa==1)
-			D=SolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp);
+			D=SolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp, aparent);
 #ifdef NRELSPA
 		else
 			D=NRELSolarDay(&ut, NULL, 0, lon, lat, E, NULL, Pr, Temp);
