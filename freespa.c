@@ -166,16 +166,6 @@ JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 	return JD;
 }
 
-JulianDay AddDays(JulianDay JD, double Ndays)
-{
-	JD.JD+=Ndays;
-	JD.JDE+=Ndays; // assume delta t does not change much from day to day
-	JD.JC+=Ndays/36525.0;
-	JD.JCE+=Ndays/36525.0;
-	JD.JME=JD.JCE/10;
-	return JD;
-}
-
 
 // Julian Day to tm struct 
 struct tm *JDgmtime(JulianDay JD, struct tm *ut)

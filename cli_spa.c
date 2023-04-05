@@ -231,6 +231,9 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 #ifndef DEFLON
 	#define DEFLON 6.41143
 #endif
+#ifndef DEFELE
+	#define DEFELE 96.0
+#endif
 
 char *solevents[11]={
 	"Prev.Sol.Midnight",
@@ -256,7 +259,7 @@ int main(int argc, char **argv)
 	double lon=deg2rad(DEFLON),lat=deg2rad(DEFLAT);
 	double dip, *gdip=NULL;
 	// elevation
-	double E=96.0, Pr=1010, Temp=10;
+	double E=DEFELE, Pr=1010, Temp=10;
 	// use default freespa
 	int fspa=1;	
 	// what to compute/show
@@ -272,7 +275,6 @@ int main(int argc, char **argv)
 	char buffer [80];
 	sol_pos P, Pa;
 	int c;
-	
 	while (1)
 	{
 		static struct option long_options[] =
@@ -397,11 +399,15 @@ int main(int argc, char **argv)
 					{
 						case 'c':
 							printf("\t--%s [-%c] <latitude>,<longitude>\n", long_options[i].name, (char)long_options[i].val);
-							printf("\t  Default Coordinate: 50.90329,6.41143\n\n");
+							printf("\t  Default Coordinate: %f,%f\n\n", DEFLAT, DEFLON);
 							break;
 						case 'e':
 							printf("\t--%s [-%c] <elevation>\n", long_options[i].name, (char)long_options[i].val);
-							printf("\t  Default Elevation: 96 m\n\n");
+							printf("\t  Default Elevation: %g m\n\n",DEFELE);
+							break;
+						case 'd':
+							printf("\t--%s [-%c] <dip>\n", long_options[i].name, (char)long_options[i].val);
+							printf("\t  specify a geometric dip (default none, compute from elevation)\n\n");
 							break;
 						case 'p':
 							printf("\t--%s [-%c] <pressure>\n", long_options[i].name, (char)long_options[i].val);
@@ -430,6 +436,10 @@ int main(int argc, char **argv)
 						case 'N':
 							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
 							printf("\t  Use NREL spa instead of freespa\n\n");
+							break;
+						case 'A':
+							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
+							printf("\t  Use modified Bennet coefficients\n\n");
 							break;
 						case 'h':
 							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
@@ -505,8 +515,8 @@ int main(int argc, char **argv)
 			{
 				strftime (buffer,80,"%Y-%m-%d %H:%M:%S",D.ev+chrono[i]);
 				printf("%s : %s\n", solevents[chrono[i]],buffer);
-				if (chrono[i]>2)
-					printf("\t\t      (error %7.4f °)\n", rad2deg(D.E[chrono[i]]));
+				/*if (chrono[i]>2)
+					printf("\t\t      (error %7.4f °)\n", rad2deg(D.E[chrono[i]]));*/
 			}
 			else if (D.status[chrono[i]]==1)
 				printf("%s : -- sun above\n", solevents[chrono[i]]);
