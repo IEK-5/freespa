@@ -202,7 +202,7 @@ where y is the year, and Δt is in seconds.
 ## Differences with NREL spa
 Freespa was developed due to license issues with NREL's spa code. As such 
 the goal was to more or less re-implement NREL spa. Thus the results are 
-generally identical, or very similar. The interface is, however, 
+generally identical or very similar. The interface is, however, 
 different (i.e. freespa is _not_ a drop-in replacement). In addition 
 there are some differences in computational details. Some of those 
 details might be considered bugs. Note that some of the behavior of 
@@ -216,7 +216,7 @@ This seems a rather arbitrary limit that ignores the fact that this
 limit only holds for the time period ranging from approximately 
 245 -- 3400 [3]. This is probably fine for most applications. 
 Nevertheless, the authors of NREL spa claim the model is accurate for 
-the period -2000 -- 6000 [5]. 
+the period -2000 -- 6000 [5].
 
 Both NREL's SPA and freespa can compute sunrise, transit, and sunset. 
 The sunrise/transit/sunset routines in NREL's spa are probably more 
@@ -224,10 +224,10 @@ efficient. However, the accuracy of NREL spa is not guaranteed and I
 incidentally find offsets in zenith angles of up to 0.1°, even when 
 limiting the range of latitudes between -65--65°. One might argue that 
 determining the exact sunrise and set times is always inaccurate due 
-atmospheric refraction effects [2]. On the other hand, I would argue 
-that adding model uncertainties does not help and, in this case, is not 
-hard to avoid (simply check the result and, in necessary improve the 
-answer). 
+atmospheric refraction effects [2]. On the other hand, it is 
+unnecessary to add model uncertainties to a problem that is already 
+hard. The freespa routines use iterative methods to find an accurate 
+solution (within one second _or_ within 0.05°). 
 
 Another limitation of NREL's spa sunrise/set routine is that it does 
 not compute a sunrise/set event if _one_ of the two events does not 

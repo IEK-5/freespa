@@ -250,6 +250,25 @@ char *solevents[11]={
 };
 int chrono[11]={0,9,7,5,3,1,4,6,8,10,2};
 
+void PrintUTC(struct tm *ut, char *buffer, int n)
+{
+	strftime (buffer,n,"%Y-%m-%d %H:%M:%S   UTC",ut);
+}
+
+void PrintLTZ(struct tm *ut, char *buffer, int n)
+{
+	time_t tc=mkgmjtime(ut);
+	struct tm lt={0};
+	localtime_r(&tc, &lt);
+	strftime (buffer,n,"%Y-%m-%d %H:%M:%S %5Z",&lt);
+}
+
+void PrintLST(struct tm *lst, char *buffer, int n)
+{
+	strftime (buffer,n,"%Y-%m-%d %H:%M:%S",lst);
+}
+
+
 #define deg2rad(a) (M_PI*(a)/180.0)
 #define rad2deg(a) (180.0*(a)/M_PI)
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
@@ -261,7 +280,7 @@ int main(int argc, char **argv)
 	// elevation
 	double E=DEFELE, Pr=1010, Temp=10;
 	// use default freespa
-	int fspa=1;	
+	int fspa=1, local=0;	
 	// what to compute/show
 	int tsoltime=0, solpos=1, suntimes=0;	
 	// per default we use the current time
@@ -285,6 +304,7 @@ int main(int argc, char **argv)
 			{"pressure",    required_argument, 0, 'p'},
 			{"temperature", required_argument, 0, 'T'},
 			{"time",        required_argument, 0, 't'},
+			{"local-time",        no_argument, 0, 'l'},
 			{"soltime",           no_argument, 0, 's'},
 			{"solpos",            no_argument, 0, 'S'},
 			{"suntimes",          no_argument, 0, 'r'},
@@ -294,7 +314,7 @@ int main(int argc, char **argv)
 			{0, 0, 0, 0}
 		};
 		int option_index = 0;
-		c = getopt_long (argc, argv, "c:e:d:p:T:t:sSrNAh",long_options, &option_index);
+		c = getopt_long (argc, argv, "c:e:d:p:T:t:lsSrNAh",long_options, &option_index);
 		if (c == -1)
 			break;
 			
@@ -368,6 +388,9 @@ int main(int argc, char **argv)
 				}
 				tc=atol(optarg);
 				break;
+			case 'l':
+				local=1;
+				break;
 			case 's':
 				tsoltime=(!tsoltime);
 				break;
@@ -421,6 +444,10 @@ int main(int argc, char **argv)
 							printf("\t--%s [-%c] <time>\n", long_options[i].name, (char)long_options[i].val);
 							printf("\t  Default Time: current unix time (%ld)\n\n", tc);
 							break;
+						case 'l':
+							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
+							printf("\t  display local time\n\n");
+							break;
 						case 's':
 							printf("\t--%s [-%c]\n", long_options[i].name, (char)long_options[i].val);
 							printf("\t  toggle printing the true solar time (default false)\n\n");
@@ -467,13 +494,15 @@ int main(int argc, char **argv)
 	p=gmjtime_r(&tc, &ut);
 	if (tsoltime)
 	{
-		printf("| Time --------------------------------\n");
-		strftime (buffer,80,"UTC:\t\t%Y-%m-%d %H:%M:%S",&ut);
-		puts(buffer);
+		printf("| Time --------------------------------------\n");
+		PrintUTC(&ut, buffer, 80);
+		printf("UTC               : %s\n", buffer);
+		PrintLTZ(&ut, buffer, 80);
+		printf("LOC               : %s\n", buffer);		
 		lst=TrueSolarTime(p, 0, 0, lon, lat);
-		strftime (buffer,80,"LST:\t\t%Y-%m-%d %H:%M:%S",&lst);
-		puts(buffer);
-		printf("---------------------------------------\n\n");
+		PrintLST(&lst, buffer, 80);
+		printf("LST               : %s\n", buffer);
+		printf("---------------------------------------------\n");
 	}
 	
 	if (solpos)
@@ -490,18 +519,18 @@ int main(int argc, char **argv)
 			Pa=aparent(P, gdip, E, Pr, Temp);
 		}
 #endif
-		printf("| Solar Position ----------------------\n");
-		printf("aparent zenith: \t%13f °\n", rad2deg(Pa.z));
-		printf("aparent azimuth:\t%13f °\n", rad2deg(Pa.a));
-		printf("true    zenith: \t%13f °\n", rad2deg(P.z));
-		printf("true    azimuth:\t%13f °\n", rad2deg(P.a));
-		printf("---------------------------------------\n\n");
+		printf("| Solar Position ----------------------------\n");
+		printf("apparent zenith   :            %13f°\n", rad2deg(Pa.z));
+		printf("apparent azimuth  :            %13f°\n", rad2deg(Pa.a));
+		printf("true     zenith   :            %13f°\n", rad2deg(P.z));
+		printf("true     azimuth  :            %13f°\n", rad2deg(P.a));
+		printf("---------------------------------------------\n");
 	}
 	if (suntimes)
 	{
 		solar_day D;
 		int i;
-		printf("| Solar Day Events---------------------\n");
+		printf("| Solar Day Events --------------------------\n");
 		if (fspa==1)
 			D=SolarDay(&ut, NULL, 0, lon, lat, E, gdip, Pr, Temp, aparent);
 #ifdef NRELSPA
@@ -513,8 +542,13 @@ int main(int argc, char **argv)
 			// go through the day events
 			if (D.status[chrono[i]]==0)
 			{
-				strftime (buffer,80,"%Y-%m-%d %H:%M:%S",D.ev+chrono[i]);
+				if (local)
+					PrintLTZ(D.ev+chrono[i], buffer, 80);
+				else
+					PrintUTC(D.ev+chrono[i], buffer, 80);
+				
 				printf("%s : %s\n", solevents[chrono[i]],buffer);
+					
 				/*if (chrono[i]>2)
 					printf("\t\t      (error %7.4f °)\n", rad2deg(D.E[chrono[i]]));*/
 			}
@@ -524,7 +558,7 @@ int main(int argc, char **argv)
 				printf("%s : -- sun below\n", solevents[chrono[i]]);
 		}	
 
-		printf("---------------------------------------\n\n");
+		printf("---------------------------------------------\n");
 	}
 	exit(0);
 }
