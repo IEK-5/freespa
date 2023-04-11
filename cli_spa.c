@@ -154,7 +154,6 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 {
 	solar_day D={0};
 	sol_pos P;
-	double E;
 	spa_data spa;
 	time_t t, t0, tt;	
 	int i;
@@ -260,7 +259,11 @@ void PrintLTZ(struct tm *ut, char *buffer, int n)
 	time_t tc=mkgmjtime(ut);
 	struct tm lt={0};
 	localtime_r(&tc, &lt);
+#ifdef __MINGW64__
+	strftime (buffer,n,"%Y-%m-%d %H:%M:%S %Z",&lt);
+#else
 	strftime (buffer,n,"%Y-%m-%d %H:%M:%S %5Z",&lt);
+#endif
 }
 
 void PrintLST(struct tm *lst, char *buffer, int n)
@@ -546,7 +549,6 @@ int main(int argc, char **argv)
 					PrintLTZ(D.ev+chrono[i], buffer, 80);
 				else
 					PrintUTC(D.ev+chrono[i], buffer, 80);
-				
 				printf("%s : %s\n", solevents[chrono[i]],buffer);
 					
 				/*if (chrono[i]>2)

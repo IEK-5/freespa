@@ -2,8 +2,11 @@ SRC=freespa.c testspa.c
 OBJ=freespa.o
 HDR=freespa.h freespa_tables.h freespa_dt_table.h
 CC=gcc
-CFLAGS=-O3 -flto -march=native
-# CFLAGS=-Og -Wall -pedantic -flto -g
+# CFLAGS=-O3 -flto
+CFLAGS=-Og -Wall -pedantic -flto -g
+# CC=x86_64-w64-mingw32-gcc
+# CFLAGS=-O3 -flto -D_POSIX_C_SOURCE -D_POSIX_THREAD_SAFE_FUNCTIONS
+# CFLAGS=-Og -Wall -pedantic -flto -g -D_POSIX_C_SOURCE
 LFLAGS=-lm
 ifneq ("$(wildcard spa.c)","")
 	ifneq ("$(wildcard spa.h)","")

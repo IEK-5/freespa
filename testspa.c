@@ -125,14 +125,23 @@ int LogSPA(char *fn, int N)
 		{
 			P=SPA(p, 0, 0, lon,  lat, e);
 			Pa=ApSolposBennet(P,NULL, e, pp, T);
+			
+#ifdef __MINGW64__
+			fprintf(f,"%16lld\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\n", tc, lat,lon,e, pp, T, P.a,P.z,Pa.a, Pa.z);
+#else
 			fprintf(f,"%16ld\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\t%19.16e\n", tc, lat,lon,e, pp, T, P.a,P.z,Pa.a, Pa.z);
+#endif
 		}
 		else
 		{
 			E++;
 			if (E<10)
 			{
+#ifdef __MINGW64__
+				fprintf(stderr,"Warning: failed to convert unix time %lld to broken down UTC\n", tc);
+#else
 				fprintf(stderr,"Warning: failed to convert unix time %ld to broken down UTC\n", tc);
+#endif
 			}
 			else if (E==10)
 				fprintf(stderr,"More than 10 unix time conversion errors occurred!\n");			
@@ -180,7 +189,11 @@ int TestSPA(char *fn)
 			break;
 		if (line[0]=='#')
 			continue;
+#ifdef __MINGW64__
+		i=sscanf(line,"%lld %lf %lf %lf %lf %lf %lf %lf %lf %lf", &tc, &lat, &lon, &e, &pp, &T, &Pr.a, &Pr.z, &Pra.a, &Pra.z);
+#else
 		i=sscanf(line,"%ld %lf %lf %lf %lf %lf %lf %lf %lf %lf", &tc, &lat, &lon, &e, &pp, &T, &Pr.a, &Pr.z, &Pra.a, &Pra.z);
+#endif
 		if (i!=10)
 		{
 			if (Nunread<10)
@@ -200,8 +213,12 @@ int TestSPA(char *fn)
 					Et++;
 					if (Et<10)
 					{
-						strftime(timestr, 50, "%Y/%m/%d %T %Z",p);
+						strftime(timestr, 50, "%Y/%m/%d %H:%M:%S %Z",p);					
+#ifdef __MINGW64__
+						fprintf(stderr, "%s (%lld)\nlon: %.12e\nlat: %.12e\n", timestr, tc, lon, lat);
+#else
 						fprintf(stderr, "%s (%ld)\nlon: %.12e\nlat: %.12e\n", timestr, tc, lon, lat);
+#endif
 						fprintf(stderr, "e: %.12e\np: %.12e\nT: %.12e\n", e,pp,T);
 						fprintf(stderr, "Solar vector deviates by %e rad\n", d);
 						printf("t zenith:  %e\t%e\t%e\n", P.z, Pr.z, P.z-Pr.z);
@@ -219,9 +236,13 @@ int TestSPA(char *fn)
 						Et++;
 						if (Et<10)
 						{
-							strftime(timestr, 50, "%Y/%m/%d %T %Z",p);
+							strftime(timestr, 50, "%Y/%m/%d %H:%M:%S %Z",p);				
+#ifdef __MINGW64__
+							fprintf(stderr, "%s (%lld)\nlon: %.12e\nlat: %.12e\n", timestr, tc, lon, lat);
+#else
 							fprintf(stderr, "%s (%ld)\nlon: %.12e\nlat: %.12e\n", timestr, tc, lon, lat);
-						fprintf(stderr, "e: %.12e\np: %.12e\nT: %.12e\n", e,pp,T);
+#endif
+							fprintf(stderr, "e: %.12e\np: %.12e\nT: %.12e\n", e,pp,T);
 							fprintf(stderr, "Solar vector deviates by %e rad\n", d);
 							printf("a zenith:  %e\t%e\t%e\n", Pa.z, Pra.z, Pa.z-Pra.z);
 							printf("a azimuth: %e\t%e\t%e\n\n", Pa.a, Pra.a, Pa.a-Pra.a);
@@ -236,7 +257,11 @@ int TestSPA(char *fn)
 				Ec++;
 				if (Ec<10)
 				{
+#ifdef __MINGW64__
+					fprintf(stderr,"Warning: failed to convert unix time %lld to broken down UTC\n", tc);
+#else
 					fprintf(stderr,"Warning: failed to convert unix time %ld to broken down UTC\n", tc);
+#endif
 				}
 				else if (Ec==10)
 					fprintf(stderr,"More than 10 unix time conversion errors occurred!\n");				
@@ -258,6 +283,9 @@ int TestSPA(char *fn)
 	return 0;
 }
 #define N 10000
+#ifdef __MINGW64__
+const char * TZENV="TZ=:/usr/share/zoneinfo/Etc/UTC";
+#endif
 int main(int argc, char **argv)
 {
 	int r=0;
@@ -279,7 +307,11 @@ int main(int argc, char **argv)
 		
 	if (curtz)
 		old=strdup(curtz);
+#ifdef __MINGW64__
+	putenv(TZENV);
+#else
     setenv("TZ", ":/usr/share/zoneinfo/Etc/UTC", 1); // always use UTC
+#endif
     tzset();
     ut.tm_year=2022-1900;
     ut.tm_mon=0;
@@ -309,11 +341,15 @@ int main(int argc, char **argv)
     if (old)
     {
 		printf("%s\n", old);
+#ifndef __MINGW64__
 		setenv("TZ", old, 1); // Restore old PATH
+#endif
 		free(old); // Don't forget to free!
 	}
+#ifndef __MINGW64__
 	else
 		unsetenv("TZ");
+#endif
     tzset();
 	return r;
 }

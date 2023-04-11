@@ -244,12 +244,12 @@ In addition to computing sunrise/set times freespa can compute various
 dawn and dusk times (civil, nautical, and astronomical dawn and dusk).
 
 ## References
-[1] Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, Inc., Richmond, Virginia, USA. Pages 105-108
+[1] J. Meeus, Astronomical Algorithms, second ed. Willmann-Bell, Inc., Richmond, Virginia, USA. (1998): 105-108
 
-[2] Wilson, Teresa, "Evaluating the Effectiveness of Current Atmospheric Refraction Models in Predicting Sunrise and Sunset Times", Open Access Dissertation, Michigan Technological University, 2018.https://doi.org/10.37099/mtu.dc.etdr/697
+[2] T. Wilson, "Evaluating the Effectiveness of Current Atmospheric Refraction Models in Predicting Sunrise and Sunset Times", Open Access Dissertation, Michigan Technological University, (2018). https://doi.org/10.37099/mtu.dc.etdr/697
 
-[3] Morrison, L. V., & Stephenson, F. R. (2004). Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses. Journal for the History of Astronomy, 35(3), 327–336. https://doi.org/10.1177/002182860403500305
+[3] L. V. Morrison, and F. R. Stephenson, "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3), (2004): 327–336. https://doi.org/10.1177/002182860403500305
 
 [4] A. Andreas, spa.c source code retrieved from https://midcdmz.nrel.gov/spa/ on the 27th of march 2023
 
-[5] I.  Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589
+[5] I. Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589

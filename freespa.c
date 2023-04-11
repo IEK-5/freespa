@@ -968,6 +968,8 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	R=(double)(2*((z2<z1))-1); // sun rising (R=1.0) or falling (R=-1.0)
 	// first guess:
 	tt=t1+(time_t)round(acos(z/b-a/b)/w);
+	if ((tt<t1)||(tt>t2))
+		tt=(t1+t2)/2;
 	put=gmjtime_r(&tt, &ut);
 	P=SPA(put, delta_t, delta_ut1, lon, lat, e);
 	P=refract(P,gdip,e,p,T);
@@ -1000,6 +1002,8 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	{
 		/* bisection */
 		tt=(time_t)round(((z-zmin)*(double)tmax+(zmax-z)*(double)tmin)/((z-zmin)+(zmax-z)));
+		if ((tt<t1)||(tt>t2))
+			tt=(t1+t2)/2;
 		// avoid all too asymmetrical brackets
 		if (((tt-tmin)>MAXRAT*(tmax-tt))||(MAXRAT*(tt-tmin)<(tmax-tt)))
 			tt=(tmin+tmax)/2;
