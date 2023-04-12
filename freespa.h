@@ -47,15 +47,14 @@
 
 // some error codes for the error flag in sol_pos
 // errors are be combined with a binary OR
-#define _FREESPA_DET_OOR		0X001	// Δt out of range
-#define _FREESPA_DEU_OOR		0X002	// ΔUT1 out of range
-#define _FREESPA_LON_OOR		0X004	// longitude out of range
-#define _FREESPA_LAT_OOR		0X008	// latitude out of range
-#define _FREESPA_ELE_OOR		0X010	// elevation out of range
-#define _FREESPA_PRE_OOR		0X020	// pressure out of range
-#define _FREESPA_TEM_OOR		0X040	// temperature out of range
-#define _FREESPA_DIP_OOR		0X080	// geometric dip out of range
-#define _FREESPA_GMTIMEF		0X100	// time conversion error 
+#define _FREESPA_DEU_OOR		0X01	// ΔUT1 out of range
+#define _FREESPA_LON_OOR		0X02	// longitude out of range
+#define _FREESPA_LAT_OOR		0X04	// latitude out of range
+#define _FREESPA_ELE_OOR		0X08	// elevation out of range
+#define _FREESPA_PRE_OOR		0X10	// pressure out of range
+#define _FREESPA_TEM_OOR		0X20	// temperature out of range
+#define _FREESPA_DIP_OOR		0X40	// geometric dip out of range
+#define _FREESPA_GMTIMEF		0X80	// time conversion error 
 
 // container struct for solar position data
 typedef struct sol_pos {

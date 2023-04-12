@@ -529,27 +529,19 @@ int InputCheck(double delta_ut1, double lon,
 {
 	int E=0;
 	
-	if (delta_ut1<-1)
-		E|=_FREESPA_DET_OOR;
-	else if (delta_ut1>1)
+	if ((delta_ut1<-1)||(delta_ut1>1))
 		E|=_FREESPA_DEU_OOR;
 		
-	if (lon<-M_PI)
-		E|=_FREESPA_LON_OOR;
-	else if (lon>M_PI)
+	if ((lon<-M_PI)||(lon>M_PI))
 		E|=_FREESPA_LON_OOR;
 		
-	if (lat<-M_PI/2)
-		E|=_FREESPA_LAT_OOR;
-	else if (lat>M_PI/2)
+	if ((lat<-M_PI/2)||(lat>M_PI/2))
 		E|=_FREESPA_LAT_OOR;
 	
 	if (e<-EARTH_R)
 		E|=_FREESPA_ELE_OOR;
 	
-	if (p<0)
-		E|=_FREESPA_PRE_OOR;
-	if (p>5000)
+	if ((p<0)||(p>5000))
 		E|=_FREESPA_PRE_OOR;
 		
 	if (T<ABSOLUTEZERO)

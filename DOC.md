@@ -12,18 +12,6 @@ running on 64bit hardware I expect `time_t` to be a 64bit signed
 integer. Modern windows systems generally also support 64bit integer 
 type `time_t` types.
 
-Additional note:
-
-The common `time.h` time unitilies may be used in conjunction with 
-freespa. Freespa routines generally take broken-down (UTC!) time as 
-input (i.e. a `tm struct`). This had the advantage to be somewhat 
-standard conformant and allows the use of standard utilities like 
-`gmtime`. However, the downside is that the behavior of utilities like 
-gmtime is implementation dependent. For instance, on windows systems 
-`time_t` may be a signed 64 bit integer, `gmtime`, however, does not 
-accept negative numbers nor dates beyond somewhere around the year 
-3000. For this, and some other other reasons (see Section Time 
-Utilities), freespa offers some alternative time utilities.
 
 ## Units
 Freespa uses the following units:
@@ -46,15 +34,14 @@ structure is defined as:
 where z is the zenith angle, and a the azimuth. The integer E is an 
 error flag which may contain the following error codes:
 
-    #define _FREESPA_DET_OOR		0X001	// Δt out of range
-    #define _FREESPA_DEU_OOR		0X002	// ΔUT1 out of range
-    #define _FREESPA_LON_OOR		0X004	// longitude out of range
-    #define _FREESPA_LAT_OOR		0X008	// latitude out of range
-    #define _FREESPA_ELE_OOR		0X010	// elevation out of range
-    #define _FREESPA_PRE_OOR		0X020	// pressure out of range
-    #define _FREESPA_TEM_OOR		0X040	// temperature out of range
-    #define _FREESPA_DIP_OOR		0X080	// geometric dip out of range
-    #define _FREESPA_GMTIMEF		0X100	// time conversion error 
+    #define _FREESPA_DEU_OOR		0X01	// ΔUT1 out of range
+    #define _FREESPA_LON_OOR		0X02	// longitude out of range
+    #define _FREESPA_LAT_OOR		0X04	// latitude out of range
+    #define _FREESPA_ELE_OOR		0X08	// elevation out of range
+    #define _FREESPA_PRE_OOR		0X10	// pressure out of range
+    #define _FREESPA_TEM_OOR		0X20	// temperature out of range
+    #define _FREESPA_DIP_OOR		0X40	// geometric dip out of range
+    #define _FREESPA_GMTIMEF		0X80	// time conversion error
 
 which may be combined with a binary OR. If all is OK E=0.
 
@@ -98,6 +85,24 @@ The status flag may contain the following values:
     #define _FREESPA_EV_OK         0  // All OK
     #define _FREESPA_EV_SUNABOVE   1  // Sun always above (e.g. midnight sun)
     #define _FREESPA_EV_SUNBELOW  -1  // Sun always below (e.g. polar night)
+
+## Input Data Ranges
+There are some limits to the accepted input ranges of various arguments.
+In general freespa does not limit much and thus allows for some pretty 
+unreasonable input, use at your own discretion.
+
+Valid input to freespa routines adheres to *at least* the following ranges:
+
+- ΔUT1:  -1 ≤ ΔUT1 ≤1
+- longitude: -π ≤ lon ≤ π
+- latitude: -π/2 ≤ lat ≤ π/2
+- elevation: Rearth < E, where Rearth = 6378136.6 m
+- pressure: 0 ≤ p ≤ 5000
+- Temperature: -273.15 °C ≤ T
+
+No other limits are imposed on other input variables, such as Δt, thus
+the limits depends on the underlying data types.
+
 
 ## Main SPA Routines
 The main routine to compute the real solar position is:
@@ -216,11 +221,12 @@ defines it own conversion routines:
 These routines work the same as the standard routines defined in 
 `time.h`. They do not suffer from arbitrary limitations such as those 
 imposed in windows systems where `gmtime` cannot handle dates before 
-1970 and after the year 3000. Furthermore, they adhere to the 10-day 
-gap between the Julian and Gregorian calendar where the Julian calendar 
-ends on October 4, 1582 (JD = 2299160), and the next day the Gregorian 
-calendar starts on October 15, 1582. Thus these routines provide a 
-historic extension of unix time before October 15, 1582.
+1970 and after the year 3000 (despite the `time_t` type being a 64bit 
+integer). Furthermore, they adhere to the 10-day gap between the Julian 
+and Gregorian calendar where the Julian calendar ends on October 4, 
+1582 (JD = 2299160), and the next day the Gregorian calendar starts 
+on October 15, 1582. Thus these routines provide a historic extension 
+of unix time before October 15, 1582.
 
 For many freespa routines we need Δt values. In most cases one can suffice 
 with passing a NULL pointer, which will signal freespa to determine an 
