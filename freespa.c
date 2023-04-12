@@ -1205,14 +1205,14 @@ int testjulian()
 	JulianDay D;
 	struct tm ut={0};
 	struct tm *p=NULL;
-	timestr=malloc(50*sizeof(char));
+	timestr=malloc(80*sizeof(char));
 	for (i=0;i<N;i++)
 	{
 		p=gmjtime_r(&dates[i], &ut);	
-		if (strftime(timestr, 50, "%Y-%m-%d %T %Z",p)>0)
+		if (strftime(timestr, 80, "%Y-%m-%d %H:%M:%S %Z",p)>0)
 			printf("testing %s", timestr);
 		else
-			fprintf(stderr,"Error: timestring exceeds 50 bytes\n");
+			fprintf(stderr,"Error: timestring exceeds 80 bytes\n");
 		D=MakeJulianDayEpoch(dates[i], 0,0);
 		printf("--> JD:%.1f\n", D.JD);
 		

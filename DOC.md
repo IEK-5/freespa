@@ -1,4 +1,30 @@
 #Documentation freespa
+## Requirements
+The freespa routines rely on a 64bit signed integer `time_t` type, 
+representing the seconds since the epoch. This restricts the 
+portability of freespa. In ISO C `time_t` is specified as either an 
+integer or floating-point type, and even the meaning to `time_t` is not 
+specified (i.e. it may not be seconds). On POSIX-conformant systems 
+`time_t` is an integer type, but it may still be 32bit or unsigned. The 
+GNU C library uses signed integers and negative numbers are interpreted 
+as dates before the epoch. On most modern Linux and Unix systems, 
+running on 64bit hardware I expect `time_t` to be a 64bit signed 
+integer. Modern windows systems generally also support 64bit integer 
+type `time_t` types.
+
+Additional note:
+
+The common `time.h` time unitilies may be used in conjunction with 
+freespa. Freespa routines generally take broken-down (UTC!) time as 
+input (i.e. a `tm struct`). This had the advantage to be somewhat 
+standard conformant and allows the use of standard utilities like 
+`gmtime`. However, the downside is that the behavior of utilities like 
+gmtime is implementation dependent. For instance, on windows systems 
+`time_t` may be a signed 64 bit integer, `gmtime`, however, does not 
+accept negative numbers nor dates beyond somewhere around the year 
+3000. For this, and some other other reasons (see Section Time 
+Utilities), freespa offers some alternative time utilities.
+
 ## Units
 Freespa uses the following units:
 
@@ -9,14 +35,16 @@ Freespa uses the following units:
 
 
 ## Data Structures:
-In freespa.h several data structures are defined. The `sol_pos` structure is defined as:
+In freespa.h several data structures are defined. The `sol_pos` 
+structure is defined as:
 
     typedef struct sol_pos {
     	double z, a; // zenith, azimuth
     	int E; // error flag
     } sol_pos;
 
-where z is the zenith angle, and a the azimuth. The integer E is an error flag which may contain the following error codes:
+where z is the zenith angle, and a the azimuth. The integer E is an 
+error flag which may contain the following error codes:
 
     #define _FREESPA_DET_OOR		0X001	// Δt out of range
     #define _FREESPA_DEU_OOR		0X002	// ΔUT1 out of range
@@ -30,7 +58,8 @@ where z is the zenith angle, and a the azimuth. The integer E is an error flag w
 
 which may be combined with a binary OR. If all is OK E=0.
 
-In case you are interested in computing the daily events such as sunrise and set, you need the `solar_day` struct:
+In case you are interested in computing the daily events such as 
+sunrise and set, you need the `solar_day` struct:
  
     typedef struct solar_day {
     	struct tm ev[11];
@@ -70,7 +99,7 @@ The status flag may contain the following values:
     #define _FREESPA_EV_SUNABOVE   1  // Sun always above (e.g. midnight sun)
     #define _FREESPA_EV_SUNBELOW  -1  // Sun always below (e.g. polar night)
 
-## Functions
+## Main SPA Routines
 The main routine to compute the real solar position is:
 
 `sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
@@ -85,8 +114,9 @@ where:
 * `double lat`: latitude in radians
 * `double e`: Elevation in m
 
-This computes the _real_ solar position. In practice the solar position is affected by refraction. To 
-compute the apparent position of the sun several routines may be used:
+This computes the _real_ solar position. In practice the solar position 
+is affected by refraction. To compute the apparent position of the sun 
+several routines may be used:
 
     sol_pos ApSolposBennet(sol_pos P, double *gdip, double e, double p, double T);
     
@@ -94,7 +124,8 @@ and
 
     sol_pos ApSolposBennetNA(sol_pos P, double *gdip, double e, double p, double T);
 
-Both routines work the same and only differ in the used model coefficients. The input for these routines is as follows:
+Both routines work the same and only differ in the used model 
+coefficients. The input for these routines is as follows:
 
 * `P`:	    real solar position
 * `gdip`:	geometric dip, i.e. how far the horizon is below the observer (in rad). If this pointer is NULL the geometric dip is computed from the observer elevation (assuming the horizon is at sea level)
@@ -102,20 +133,10 @@ Both routines work the same and only differ in the used model coefficients. The 
 * `p`:		pressure (in mbar)
 * `T`:		Temperature (in °C)
 
-The solar refraction is computed with the simple Bennet equation [1]. The BennetNA routines are based on the modified coefficients as published in [2].
+The solar refraction is computed with the simple Bennet equation [1]. 
+The BennetNA routines are based on the modified coefficients as 
+published in [2].
 
-The equation of time describes the variation of the true solar time w.r.t. mean solar time. Freespa offers the `TrueSolarTime` routine to determine the true solar time:
-
-    struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, 
-						    double lon, double lat);
-
-The function returns a time struct representing the true solar time (the only non-UTC time used in freespa). The input to this function is:
-
-* `ut`:	       pointer to time struct with UTC time
-* `delta_t`:   pointer to Δt value, or NULL (use internal tables)
-* `delta_ut1`: delta_ut1 
-* `lon`:	   longitude (in radians)
-* `lat`:	   latitude (in radians)
 
 To compute the solar events of a day freespa offers:
 
@@ -164,22 +185,42 @@ wants to compute sunrise and sunset, one can define:
  
     SDMASK=(_FREESPA_SUNRISE|_FREESPA_SUNSET);
 
-This will can some computational overhead.
 
-Finally freespa offers several utilities to work with time. To work with 
-time structs and unix time in a consistent manner with the internally used 
-Julian day, freespa defines it won conversion routines:
+## Time Utilities
+Finally freespa offers several utilities to work with time. The 
+equation of time describes the variation of the true solar time w.r.t. 
+mean solar time. Freespa offers the `TrueSolarTime` routine to 
+determine the true solar time:
+
+    struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, 
+						    double lon, double lat);
+
+The function returns a time struct representing the true solar time 
+(the only non-UTC time used in freespa). The input to this function is:
+
+* `ut`:	       pointer to time struct with UTC time
+* `delta_t`:   pointer to Δt value, or NULL (use internal tables)
+* `delta_ut1`: delta_ut1 
+* `lon`:	   longitude (in radians)
+* `lat`:	   latitude (in radians)
+
+To overcome some of the implementation dependent behavior of `gmtime` 
+and `mkgmtime`, and, in addition, work with time structs and unix time 
+in a consistent manner with the internally used Julian day, freespa 
+defines it own conversion routines:
 
     struct tm *gmjtime_r(time_t *t, struct tm *ut);
     struct tm *gmjtime(time_t *t);
     time_t mkgmjtime(struct tm *ut);
 
-These routines work the same as the standard routines defined in `time.h`
-but differ in that they take into account the 10-day gap between the 
-Julian and Gregorian calendar where the Julian calendar ends on October 
-4, 1582 (JD = 2299160), and the next day the Gregorian calendar starts on 
-October 15, 1582. Thus these routines provide a historic extension of unix 
-time before October 15, 1582.
+These routines work the same as the standard routines defined in 
+`time.h`. They do not suffer from arbitrary limitations such as those 
+imposed in windows systems where `gmtime` cannot handle dates before 
+1970 and after the year 3000. Furthermore, they adhere to the 10-day 
+gap between the Julian and Gregorian calendar where the Julian calendar 
+ends on October 4, 1582 (JD = 2299160), and the next day the Gregorian 
+calendar starts on October 15, 1582. Thus these routines provide a 
+historic extension of unix time before October 15, 1582.
 
 For many freespa routines we need Δt values. In most cases one can suffice 
 with passing a NULL pointer, which will signal freespa to determine an 

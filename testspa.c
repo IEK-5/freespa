@@ -120,7 +120,7 @@ int LogSPA(char *fn, int N)
 		e=RandE();
 		pp=Randp();
 		T=RandT();
-		p=gmtime_r(&tc, &ut);
+		p=gmjtime_r(&tc, &ut);
 		if (p)
 		{
 			P=SPA(p, 0, 0, lon,  lat, e);
@@ -202,7 +202,7 @@ int TestSPA(char *fn)
 		}
 		else
 		{
-			p=gmtime_r(&tc, &ut);
+			p=gmjtime_r(&tc, &ut);
 			if (p)
 			{
 				j++;

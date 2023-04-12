@@ -48,9 +48,16 @@
 #define rad2deg(a) (180.0*(a)/M_PI)
 #define SUN_RADIUS 4.6542695162932789e-03 // in radians
 
+#ifdef __MINGW64__
+// windows criples a perfectly good 64 bit time_t to only allow dates 
+// between 1970 and 3000 
+#define MIN_EPOCH 0 // Jan 1 1970
+#define MAX_EPOCH 32535215999 // Dec 31 23:59:59 3000
+#else
 //#define MIN_EPOCH -125197920000 // year -2000
 #define MIN_EPOCH -12219292800 // Oct 15 1582
 #define MAX_EPOCH 127090080000 // year +6000
+#endif
 time_t RandEpoch()
 {
 	/* generate a random epoch between MIN_EPOCH and MAX_EPOCH
@@ -86,6 +93,7 @@ int comparetm(struct tm *p1, struct tm *p2)
 int TestGM()
 {
 	int i;
+	int r=0;
 	struct tm ut1={0};
 	struct tm ut2={0};
 	struct tm *p1, *p2;
@@ -98,22 +106,39 @@ int TestGM()
 	{
 		tc=RandEpoch();
 		p1=gmtime_r(&tc, &ut1);
-		p2=gmjtime_r(&tc, &ut2);
-		if (comparetm(p1, p2))
-			break;
+		if (!p1)
+		{
+			fprintf(stderr, "Error gmtime_r failed\n");
+			r=2;
+		}
+		else
+		{
+			p2=gmjtime_r(&tc, &ut2);
+			if (!p2)
+			{
+				fprintf(stderr, "Error gmjtime_r failed\n");
+				r=4;
+			}
+			else
+				if (comparetm(p1, p2))
+					break;
+		}
 	}
-	if (comparetm(p1, p2))
+	if (p1&&p2)
 	{
-		printf("%ld\n", tc);
-		strftime (buffer,80,"Time UTC: %Y-%m-%d %H:%M:%S",&ut1);
-		puts(buffer);
-		strftime (buffer,80,"fSpa UTC: %Y-%m-%d %H:%M:%S",&ut2);
-		puts(buffer);
-		return 1;
+		if (comparetm(p1, p2))
+		{
+			printf("%ld\n", tc);
+			strftime (buffer,80,"Time UTC: %Y-%m-%d %H:%M:%S",&ut1);
+			puts(buffer);
+			strftime (buffer,80,"fSpa UTC: %Y-%m-%d %H:%M:%S",&ut2);
+			puts(buffer);
+			return 1;
+		}
+		else
+			printf("All OK\n");
 	}
-	else
-		printf("All OK\n");
-	return 0;
+	return r;
 }
 int TestMK()
 {
