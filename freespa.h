@@ -42,8 +42,62 @@
 #endif
 #ifndef _FREESPA_H_
 #define _FREESPA_H_
-
 /* see the DOC.md file for documentation */
+
+/* freespa provides an implementation of the SPA (solar position 
+ * algorithm). A document decribing the algorithm can be found on 
+ * NREL's website:
+ * https://midcdmz.nrel.gov/spa/
+ * 
+ * The purpose of this implementation is to overcome licensing issues 
+ * with NREL's spa. NREL's spa cannot be redistributed (sort of "free 
+ * as in beer you may not share with your friends"). This 
+ * implementation you can share under the GPLv3. 
+ * 
+ * NREL's spa is built around the algorithms found in:
+ * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
+ * Inc., Richmond, Virginia, USA.
+ */
+
+/* Requirement:
+ * we require a 64bit signed integer time_t type, which limits the 
+ * portability somewhat.
+ * 
+ * Note to self:
+ * Pehaps I should use just a signed 64bit integer type instead of 
+ * time_t? I suppose it would make the code more portable but 
+ * interfacing with the standard time handling routines more awkward. 
+ * 
+ * Background:
+ * The problem of time_t is that there is no good standard for it.
+ * In ISO C `time_t` is specified as either an integer or 
+ * floating-point type, and even the meaning to `time_t` is not 
+ * specified (i.e. it may not be seconds since the epoch). On POSIX-
+ * conformant systems `time_t` is required to ba an integer type, but 
+ * it may still be 32bit or unsigned. The GNU C library uses signed 
+ * integers and negative numbers are interpreted as dates before the 
+ * epoch (as freespa does too). Also 64bit windows systems use a signed 
+ * 64bit integer as the time_t type(1). Thus at least on those two 
+ * 64bit platforms freespa should work. 
+ * 
+ * (1) Beware, on windows the gmtime routines do not work for dates
+ * before Jan 01 00:00:00 1970, and for dates after 
+ * Dec 31 23:59:59 3000. As far as I can tell these limits are 
+ * completely arbitrary. The upper limit is probably not so relevant. 
+ * However, I find it hard to understand why Microsoft engineers 
+ * deliberately criple these routines so they cannot handle birthdays 
+ * before 1970... What were they thinking, sod those old bastards?
+ * If you have to handle a birthday before 1970 on a MS system you may 
+ * use freespa's gmjtime routines instead.
+ */
+ 
+/* The following asserts check the time_t type at compile time */
+/* Verify that time_t is an integer type.  */
+_Static_assert ((time_t) 1.5 == 1, "error: time_t type is not integer");
+/* Verify that time_t is 64 bit.  */
+_Static_assert (sizeof(time_t) == 8, "error: time_t type is not 64 bit");
+/* Verify that time_t is signed.  */
+_Static_assert ((time_t) -1 < 0, "error: time_t type is not signed");
 
 // some error codes for the error flag in sol_pos
 // errors are be combined with a binary OR

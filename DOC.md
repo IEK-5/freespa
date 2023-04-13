@@ -2,16 +2,11 @@
 ## Requirements
 The freespa routines rely on a 64bit signed integer `time_t` type, 
 representing the seconds since the epoch. This restricts the 
-portability of freespa. In ISO C `time_t` is specified as either an 
-integer or floating-point type, and even the meaning to `time_t` is not 
-specified (i.e. it may not be seconds). On POSIX-conformant systems 
-`time_t` is an integer type, but it may still be 32bit or unsigned. The 
-GNU C library uses signed integers and negative numbers are interpreted 
-as dates before the epoch. On most modern Linux and Unix systems, 
-running on 64bit hardware I expect `time_t` to be a 64bit signed 
-integer. Modern windows systems generally also support 64bit integer 
-type `time_t` types.
-
+portability of freespa. In the freespa.h header file there are some
+compile time asserts that check whether the time_t type is appropriate,
+i.e. the code should not compile on systems where `time_t` is not a 
+64bit signed integer. On 64bit linux and windows systems `time_t` 
+generally meets the requirements. 
 
 ## Units
 Freespa uses the following units:

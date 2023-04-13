@@ -40,21 +40,22 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <limits.h>
 #include "freespa.h"
 #include "freespa_tables.h"
 #include "freespa_dt_table.h"
 
-/* Implementation of the solar position algorithm
- * A document decribing the algorithm can be found on NREL's website:
+/* freespa provides an implementation of the SPA (solar position 
+ * algorithm). A document decribing the algorithm can be found on 
+ * NREL's website:
  * https://midcdmz.nrel.gov/spa/
- * Also another implementation of the same algorithm can be found there.
- * Note, however, NREL's implementation is free as in beer, but NREL 
- * does not allow you to share the beer with your friends. 
  * 
- * This implementation lets you share the beer with your friends (under 
- * the conditions of the GPLv3)!
+ * The purpose of this implementation is to overcome licensing issues 
+ * with NREL's spa. NREL's spa cannot be redistributed (sort of "free 
+ * as in beer you may not share with your friends"). This 
+ * implementation you can share under the GPLv3. 
  * 
- * Most of the algorithm is described in more detail in:
+ * NREL's spa is built around the algorithms found in:
  * Meeus, J., 1998. Astronomical Algorithms, second ed. Willmann-Bell, 
  * Inc., Richmond, Virginia, USA.
  */
@@ -133,7 +134,8 @@ double get_delta_t(struct tm *ut)
 	}
 	return freespa_delta_t_table[2*imin+1]+(dyear-freespa_delta_t_table[2*imin])*(freespa_delta_t_table[2*imax+1]-freespa_delta_t_table[2*imin+1])/(freespa_delta_t_table[2*imax]-freespa_delta_t_table[2*imin]);
 }
- 
+
+
 JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 {
 	int month, year;
@@ -167,6 +169,17 @@ JulianDay MakeJulianDay(struct tm *ut, double *delta_t, double delta_ut1)
 }
 
 
+int SetIntLimits(double v, int *t)
+{
+	if ((v>INT_MIN)&&(v<INT_MAX))
+	{
+		(*t)=(int)v;
+		return 0;
+	}
+	(*t)=0;
+	return 1;
+}
+
 // Julian Day to tm struct 
 struct tm *JDgmtime(JulianDay JD, struct tm *ut)
 {
@@ -195,10 +208,17 @@ struct tm *JDgmtime(JulianDay JD, struct tm *ut)
 	else
 		ut->tm_mon=(int)(I-14);
 	// year since 1900	
+	// year may overflow for 64bit time_t, if it does return NULL
 	if (ut->tm_mon>1)
-		ut->tm_year=D-4716-1900;
+	{
+		if (SetIntLimits(D-4716-1900,&(ut->tm_year)))
+			return NULL;
+	}
 	else
-		ut->tm_year=D-4715-1900;
+	{
+		if (SetIntLimits(D-4715-1900,&(ut->tm_year)))
+			return NULL;
+	}
 	d-=trunc(d);
 	// d in days
 	d*=86400;
@@ -230,8 +250,7 @@ struct tm *gmjtime_r(time_t *t, struct tm *ut)
 {
 	JulianDay J;
 	J.JD=((double)((*t)-ETJD0)/86400.0)+JD0;
-	JDgmtime(J, ut);
-	return ut;
+	return JDgmtime(J, ut);
 }
 
 struct tm *gmjtime(time_t *t)
