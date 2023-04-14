@@ -1,12 +1,4 @@
 #Documentation freespa
-## Requirements
-The freespa routines rely on a 64bit signed integer `time_t` type, 
-representing the seconds since the epoch. This restricts the 
-portability of freespa. In the freespa.h header file there are some
-compile time asserts that check whether the time_t type is appropriate,
-i.e. the code should not compile on systems where `time_t` is not a 
-64bit signed integer. On 64bit linux and windows systems `time_t` 
-generally meets the requirements. 
 
 ## Units
 Freespa uses the following units:
@@ -17,7 +9,34 @@ Freespa uses the following units:
 - time is generally specified in UTC
 
 
-## Data Structures:
+## Data Types and Structures:
+### time_t type
+Per default freespa uses the `time_t` type to represent time in seconds 
+since the epoch. The freespa routines rely on a 64bit signed integer 
+type to represent the time since the epoch. On some platforms, however, 
+`time_t` does not meet this requirement (e.g. 32 bit linux and windows
+`time_t` is a 32 bit signed integer). If your platform has a `time_t` 
+which is not a signed 64bit integer type, youy may still use freespa by
+defining a custom `time_t` type. 
+
+In freespa the used `time_t` type is defined in the preprocessor 
+variable `FS_TIME`. If the variable is not defined, it will be set to 
+`FS_TIME_T=time_t`. Otherwise, freespa will use the type provided by 
+the defined `FS_TIME_T` value. For example, by passing 
+`FS_TIME_T=int64_t` to the preprocessor, freespa will use an `int64_t`
+type for the time since the epoch. When a custom `FS_TIME` value is 
+used, freespa will set a preprocessor define `FS_CUSTOM_TIME_T`, which 
+may be used to test if a custom `FS_TIME` value is used. 
+
+Note that using a custom `FS_TIME` will prevent you from using the 
+standard time functions in `time.h` that rely on the `time_t` type. 
+However, freespa also provides some functionality in handling epoch 
+time values (see the section on Time Utilities).
+
+At compile time freespa will assert if the provided `FS_TIME` type is 
+a 64 bit signed integer type.
+
+### Data Structures
 In freespa.h several data structures are defined. The `sol_pos` 
 structure is defined as:
 
@@ -45,7 +64,7 @@ sunrise and set, you need the `solar_day` struct:
  
     typedef struct solar_day {
     	struct tm ev[11];
-    	time_t t[11];
+    	FS_TIME_T t[11];
     	double E[11];
     	int status[11];
     } solar_day;
@@ -204,24 +223,23 @@ The function returns a time struct representing the true solar time
 * `lon`:	   longitude (in radians)
 * `lat`:	   latitude (in radians)
 
-To overcome some of the implementation dependent behavior of `gmtime` 
-and `mkgmtime`, and, in addition, work with time structs and unix time 
-in a consistent manner with the internally used Julian day, freespa 
-defines it own conversion routines:
+In order to handle a custom `FS_TIME_T` type, overcome some of the 
+implementation dependent limitations of `gmtime` and `mkgmtime` on some 
+platforms, and align the `time_t` type to the internally used Julian 
+dates, freespa defines it own conversion routines:
 
-    struct tm *gmjtime_r(time_t *t, struct tm *ut);
-    struct tm *gmjtime(time_t *t);
-    time_t mkgmjtime(struct tm *ut);
+    struct tm *gmjtime_r(FS_TIME_T *t, struct tm *ut);
+    struct tm *gmjtime(FS_TIME_T *t);
+    FS_TIME_T mkgmjtime(struct tm *ut);
 
 These routines work the same as the standard routines defined in 
-`time.h`. They do not suffer from arbitrary limitations such as those 
-imposed in windows systems where `gmtime` cannot handle dates before 
-1970 and after the year 3000 (despite the `time_t` type being a 64bit 
-integer). Furthermore, they adhere to the 10-day gap between the Julian 
-and Gregorian calendar where the Julian calendar ends on October 4, 
-1582 (JD = 2299160), and the next day the Gregorian calendar starts 
-on October 15, 1582. Thus these routines provide a historic extension 
-of unix time before October 15, 1582.
+`time.h`. However, they may be used with a custom `time_t` type and do 
+not suffer from arbitrary limitations such as those imposed in 64bit 
+windows systems [3]. Furthermore, they adhere to the 10-day gap between 
+the Julian and Gregorian calendar where the Julian calendar ends on 
+October 4, 1582 (JD = 2299160), and the next day the Gregorian calendar 
+starts on October 15, 1582. Thus these routines provide a historic 
+extension of unix time before October 15, 1582.
 
 For many freespa routines we need Δt values. In most cases one can suffice 
 with passing a NULL pointer, which will signal freespa to determine an 
@@ -232,7 +250,7 @@ appropriate value from internal tables. The following function:
 provides an interface to freespa's internal Δt tables. The internal tables 
 contain a historic dataset ranging from the year -2000 to the present day. 
 In addition it uses predictions up to 2034. Beyond this range freespa 
-resorts to a crude model by Morrison and Stephenson [3]
+resorts to a crude model by Morrison and Stephenson [4]
  
                         2
                 ⎡y-1820⎤
@@ -249,7 +267,7 @@ different (i.e. freespa is _not_ a drop-in replacement). In addition
 there are some differences in computational details. Some of those 
 details might be considered bugs. Note that some of the behavior of 
 NREL spa discussed here is not explicitly documented but can be found 
-in the source code of NREL spa [4].
+in the source code of NREL spa [5].
  
 One obvious difference is that freespa provides a simple interface to 
 determine Δt values form internal tables, if so desired. It should be 
@@ -258,7 +276,7 @@ This seems a rather arbitrary limit that ignores the fact that this
 limit only holds for the time period ranging from approximately 
 245 -- 3400 [3]. This is probably fine for most applications. 
 Nevertheless, the authors of NREL spa claim the model is accurate for 
-the period -2000 -- 6000 [5].
+the period -2000 -- 6000 [6].
 
 Both NREL's SPA and freespa can compute sunrise, transit, and sunset. 
 The sunrise/transit/sunset routines in NREL's spa are probably more 
@@ -290,8 +308,10 @@ dawn and dusk times (civil, nautical, and astronomical dawn and dusk).
 
 [2] T. Wilson, "Evaluating the Effectiveness of Current Atmospheric Refraction Models in Predicting Sunrise and Sunset Times", Open Access Dissertation, Michigan Technological University, (2018). https://doi.org/10.37099/mtu.dc.etdr/697
 
-[3] L. V. Morrison, and F. R. Stephenson, "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3), (2004): 327–336. https://doi.org/10.1177/002182860403500305
+[3] On 64bit windows the gmtime routines do not work for dates before Jan 01 00:00:00 1970, and for dates after Dec 31 23:59:59 3000. As far as I can tell these limits are completely arbitrary. The upper limit is probably not so relevant. However, I find it hard to understand why Microsoft engineers deliberately criple these routines so they cannot handle birthdays before 1970... What were they thinking, sod those old bastards?
 
-[4] A. Andreas, spa.c source code retrieved from https://midcdmz.nrel.gov/spa/ on the 27th of march 2023
+[4] L. V. Morrison, and F. R. Stephenson, "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3), (2004): 327–336. https://doi.org/10.1177/002182860403500305
 
-[5] I. Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589
+[5] A. Andreas, spa.c source code retrieved from https://midcdmz.nrel.gov/spa/ on the 27th of march 2023
+
+[6] I. Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589

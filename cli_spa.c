@@ -155,7 +155,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	solar_day D={0};
 	sol_pos P;
 	spa_data spa;
-	time_t t, t0, tt;	
+	FS_TIME_T t, t0, tt;	
 	int i;
 	
 	if (gdip)
@@ -194,7 +194,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	ut->tm_sec=0;
 	t0=mkgmjtime(ut);
 	
-	tt=t0+(time_t)(3600*spa.suntransit);
+	tt=t0+(FS_TIME_T)(3600*spa.suntransit);
 	gmjtime_r(&tt, D.ev+1);
 	D.t[1]=tt;
 	D.status[1]=_FREESPA_EV_OK;
@@ -202,7 +202,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 		
 	
 	
-	t=t0+(time_t)(3600*spa.sunrise);
+	t=t0+(FS_TIME_T)(3600*spa.sunrise);
 	if (t>tt)
 		t-=86400;
 	gmjtime_r(&t, D.ev+3);
@@ -211,7 +211,7 @@ solar_day NRELSolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	D.E[3]=P.z-M_PI/2-SUN_RADIUS;
 	D.status[3]=_FREESPA_EV_OK;
 	
-	t=t0+(time_t)(3600*spa.sunset);
+	t=t0+(FS_TIME_T)(3600*spa.sunset);
 	if (t<tt)
 		t+=86400;
 	gmjtime_r(&t, D.ev+4);
@@ -254,17 +254,19 @@ void PrintUTC(struct tm *ut, char *buffer, int n)
 	strftime (buffer,n,"%Y-%m-%d %H:%M:%S   UTC",ut);
 }
 
+#ifndef FS_CUSTOM_TIME_T
 void PrintLTZ(struct tm *ut, char *buffer, int n)
 {
-	time_t tc=mkgmjtime(ut);
+	FS_TIME_T tc=mkgmjtime(ut);
 	struct tm lt={0};
 	localtime_r(&tc, &lt);
-#ifdef __MINGW64__
+#ifdef _WIN64
 	strftime (buffer,n,"%Y-%m-%d %H:%M:%S %Z",&lt);
 #else
 	strftime (buffer,n,"%Y-%m-%d %H:%M:%S %5Z",&lt);
 #endif
 }
+#endif /*#ifndef FS_CUSTOM_TIME_T*/
 
 void PrintLST(struct tm *lst, char *buffer, int n)
 {
@@ -287,7 +289,7 @@ int main(int argc, char **argv)
 	// what to compute/show
 	int tsoltime=0, solpos=1, suntimes=0;	
 	// per default we use the current time
-	time_t tc=time(NULL);
+	FS_TIME_T tc=time(NULL);
 	sol_pos (*aparent)(sol_pos,double*,double, double, double)=&ApSolposBennet;
 	
 	
@@ -392,7 +394,11 @@ int main(int argc, char **argv)
 				tc=atol(optarg);
 				break;
 			case 'l':
+#ifndef FS_CUSTOM_TIME_T
 				local=1;
+#else
+				fprintf(stderr, "Warning: localtime not available when using a non standard time_t type\n");		
+#endif
 				break;
 			case 's':
 				tsoltime=(!tsoltime);
@@ -500,8 +506,10 @@ int main(int argc, char **argv)
 		printf("| Time --------------------------------------\n");
 		PrintUTC(&ut, buffer, 80);
 		printf("UTC               : %s\n", buffer);
+#ifndef FS_CUSTOM_TIME_T
 		PrintLTZ(&ut, buffer, 80);
-		printf("LOC               : %s\n", buffer);		
+		printf("LOC               : %s\n", buffer);	
+#endif	
 		lst=TrueSolarTime(p, 0, 0, lon, lat);
 		PrintLST(&lst, buffer, 80);
 		printf("LST               : %s\n", buffer);
@@ -545,9 +553,11 @@ int main(int argc, char **argv)
 			// go through the day events
 			if (D.status[chrono[i]]==0)
 			{
+#ifndef FS_CUSTOM_TIME_T
 				if (local)
 					PrintLTZ(D.ev+chrono[i], buffer, 80);
 				else
+#endif
 					PrintUTC(D.ev+chrono[i], buffer, 80);
 				printf("%s : %s\n", solevents[chrono[i]],buffer);
 					

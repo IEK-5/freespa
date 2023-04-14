@@ -208,7 +208,7 @@ struct tm *JDgmtime(JulianDay JD, struct tm *ut)
 	else
 		ut->tm_mon=(int)(I-14);
 	// year since 1900	
-	// year may overflow for 64bit time_t, if it does return NULL
+	// year may overflow for 64bit FS_TIME_T, if it does return NULL
 	if (ut->tm_mon>1)
 	{
 		if (SetIntLimits(D-4716-1900,&(ut->tm_year)))
@@ -246,32 +246,32 @@ struct tm *JDgmtime(JulianDay JD, struct tm *ut)
  * as it is computed from a date in freespa, i.e. the julian days all 
  * have 86400 seconds. 
  */
-struct tm *gmjtime_r(time_t *t, struct tm *ut)
+struct tm *gmjtime_r(FS_TIME_T *t, struct tm *ut)
 {
 	JulianDay J;
 	J.JD=((double)((*t)-ETJD0)/86400.0)+JD0;
 	return JDgmtime(J, ut);
 }
 
-struct tm *gmjtime(time_t *t)
+struct tm *gmjtime(FS_TIME_T *t)
 {
 	static struct tm _tmbuf;
 	return gmjtime_r(t, &_tmbuf);
 }
 // inverse of above
-time_t mkgmjtime(struct tm *ut)
+FS_TIME_T mkgmjtime(struct tm *ut)
 {
 	JulianDay J;
 	J=MakeJulianDay(ut, NULL, 0);
-	return (time_t)round((J.JD-JD0)*86400)+ETJD0;
+	return (FS_TIME_T)round((J.JD-JD0)*86400)+ETJD0;
 }
 
-time_t JDmkgmjtime(JulianDay J)
+FS_TIME_T JDmkgmjtime(JulianDay J)
 {
-	return (time_t)round((J.JD-JD0)*86400)+ETJD0;
+	return (FS_TIME_T)round((J.JD-JD0)*86400)+ETJD0;
 }
 
-JulianDay MakeJulianDayEpoch(time_t t, double *delta_t, double delta_ut1)
+JulianDay MakeJulianDayEpoch(FS_TIME_T t, double *delta_t, double delta_ut1)
 {
 	struct tm ut;
 	struct tm *p;
@@ -847,7 +847,7 @@ struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1,
 // fraction of a day represented by one second.
 #define FRACDAYSEC 1.1574074074074073e-05
 #define MAX_FPITER 20
-time_t FindSolTime(time_t t, int hour, int min, int sec, double *delta_t, 
+FS_TIME_T FindSolTime(FS_TIME_T t, int hour, int min, int sec, double *delta_t, 
                    double delta_ut1, double lon, double lat)
 {
 	double E;
@@ -932,16 +932,16 @@ time_t FindSolTime(time_t t, int hour, int min, int sec, double *delta_t,
 #define Z_EPS deg2rad(0.05)
 #define MAXRAT 2
 #define Z_MAXITER 100
-int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t, 
+int FindSolZenith(FS_TIME_T t1, FS_TIME_T t2, double z1, double z2, double *delta_t, 
                   double delta_ut1, double lon, double lat, double e, double *gdip, 
                   double p, double T, 
                   sol_pos (*refract)(sol_pos,double*,double,double,double), 
-                  double z, time_t *tz, double *E)
+                  double z, FS_TIME_T *tz, double *E)
 {
 	double a, b, w, R;
 	sol_pos P;
 	double zmin, zmax, eb;
-	time_t tt, tmin, tmax, tb;
+	FS_TIME_T tt, tmin, tmax, tb;
 	struct tm ut={0}, *put;
 	int iter=0;
 	
@@ -978,7 +978,7 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	
 	R=(double)(2*((z2<z1))-1); // sun rising (R=1.0) or falling (R=-1.0)
 	// first guess:
-	tt=t1+(time_t)round(acos(z/b-a/b)/w);
+	tt=t1+(FS_TIME_T)round(acos(z/b-a/b)/w);
 	if ((tt<t1)||(tt>t2))
 		tt=(t1+t2)/2;
 	put=gmjtime_r(&tt, &ut);
@@ -1012,7 +1012,7 @@ int FindSolZenith(time_t t1, time_t t2, double z1, double z2, double *delta_t,
 	while ((tmax-tmin>1)&&(iter<Z_MAXITER))
 	{
 		/* bisection */
-		tt=(time_t)round(((z-zmin)*(double)tmax+(zmax-z)*(double)tmin)/((z-zmin)+(zmax-z)));
+		tt=(FS_TIME_T)round(((z-zmin)*(double)tmax+(zmax-z)*(double)tmin)/((z-zmin)+(zmax-z)));
 		if ((tt<t1)||(tt>t2))
 			tt=(t1+t2)/2;
 		// avoid all too asymmetrical brackets
@@ -1080,7 +1080,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
                    sol_pos (*refract)(sol_pos,double*,double,double,double))
 {
 	solar_day D={0};
-	time_t t, tp, tc, tn;
+	FS_TIME_T t, tp, tc, tn;
 	sol_pos Pp, Pc, Pn;
 	double dip;
 	struct tm *put;
@@ -1209,7 +1209,7 @@ int testjulian()
 {
 	int ERR=0;
 	int i, N=4;
-	time_t dates[] = {946728000, 915148800, 538704000, -11676096000};
+	FS_TIME_T dates[] = {946728000, 915148800, 538704000, -11676096000};
 	double JDs[] = {2451545.0, 2451179.5, 2446822.5, 2305447.5};
     char* timestr;
 #define JDEPS (1e-3/(24*60*60)) // 1 ms accuracy 
@@ -1245,7 +1245,7 @@ int testjulian()
 int testheliocentricpos()
 {
 	int ERR=0;
-	time_t date =1066419030;
+	FS_TIME_T date =1066419030;
 	double JD = 2452930.312847222;
 	double lat=-1.7649101008724539e-06, lon=4.1919774712578828e-01, rad=0.9965422974;// all angles in radians
 	double delta_t=67.0;

@@ -1,14 +1,31 @@
 SRC=freespa.c testspa.c
 OBJ=freespa.o
 HDR=freespa.h freespa_tables.h freespa_dt_table.h
-CC=gcc
-CFLAGS=-O3 -flto
-# my tests with Ofast suggest no problems, shaves about 40% off the execution time
-#CFLAGS=-Ofast -flto -march=native
+###### 64 bit linux
+# CC=gcc
+# CFLAGS=-O3 -flto
+# CFLAGS=-Ofast -flto -march=native
 # CFLAGS=-Og -Wall -pedantic -flto -g
+
+###### 32 bit linux
+# We need to define a custom FS_TIME_T type. We can still compile
+# the freespa and the commandline utilitz but not the testing functions
+CC=gcc
+CFLAGS=-Og -Wall -pedantic -flto -g -DFS_TIME_T=int64_t
+
+###### 64 bit windows
+# we need the _POSIX_C_SOURCE define but I forgot why
 # CC=x86_64-w64-mingw32-gcc
-# CFLAGS=-O3 -flto -D_POSIX_C_SOURCE -D_POSIX_THREAD_SAFE_FUNCTIONS
+# CFLAGS=-O3 -flto -D_POSIX_C_SOURCE
 # CFLAGS=-Og -Wall -pedantic -flto -g -D_POSIX_C_SOURCE
+
+
+###### 32 bit windows
+# We need to define a custom FS_TIME_T type. We can still compile
+# the freespa and the commandline utilitz but not the testing functions
+#CC=i686-w64-mingw32-gcc
+#CFLAGS=-Og -Wall -pedantic -flto -g -D_POSIX_C_SOURCE -DFS_TIME_T=int64_t
+
 LFLAGS=-lm
 ifneq ("$(wildcard spa.c)","")
 	ifneq ("$(wildcard spa.h)","")
