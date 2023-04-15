@@ -308,7 +308,7 @@ dawn and dusk times (civil, nautical, and astronomical dawn and dusk).
 
 [2] T. Wilson, "Evaluating the Effectiveness of Current Atmospheric Refraction Models in Predicting Sunrise and Sunset Times", Open Access Dissertation, Michigan Technological University, (2018). https://doi.org/10.37099/mtu.dc.etdr/697
 
-[3] On 64bit windows the gmtime routines do not work for dates before Jan 01 00:00:00 1970, and for dates after Dec 31 23:59:59 3000. As far as I can tell these limits are completely arbitrary. The upper limit is probably not so relevant. However, I find it hard to understand why Microsoft engineers deliberately criple these routines so they cannot handle birthdays before 1970... What were they thinking, sod those old bastards?
+[3] On 64bit windows the gmtime routines do not work for dates before Jan 01 00:00:00 1970, and for dates after Dec 31 23:59:59 3000. As far as I can tell these limits are completely arbitrary. The upper limit is probably not so relevant. However, I find it hard to understand why Microsoft engineers deliberately criple these routines so they cannot handle birthdays before 1970.
 
 [4] L. V. Morrison, and F. R. Stephenson, "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3), (2004): 327–336. https://doi.org/10.1177/002182860403500305
 

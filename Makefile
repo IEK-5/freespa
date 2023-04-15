@@ -3,15 +3,16 @@ OBJ=freespa.o
 HDR=freespa.h freespa_tables.h freespa_dt_table.h
 ###### 64 bit linux
 # CC=gcc
-# CFLAGS=-O3 -flto
+CC=clang
+CFLAGS=-O3 -flto
 # CFLAGS=-Ofast -flto -march=native
 # CFLAGS=-Og -Wall -pedantic -flto -g
 
 ###### 32 bit linux
 # We need to define a custom FS_TIME_T type. We can still compile
 # the freespa and the commandline utilitz but not the testing functions
-CC=gcc
-CFLAGS=-Og -Wall -pedantic -flto -g -DFS_TIME_T=int64_t
+# CC=gcc
+# CFLAGS=-Og -Wall -pedantic -flto -g -DFS_TIME_T=int64_t
 
 ###### 64 bit windows
 # we need the _POSIX_C_SOURCE define but I forgot why
@@ -23,8 +24,8 @@ CFLAGS=-Og -Wall -pedantic -flto -g -DFS_TIME_T=int64_t
 ###### 32 bit windows
 # We need to define a custom FS_TIME_T type. We can still compile
 # the freespa and the commandline utilitz but not the testing functions
-#CC=i686-w64-mingw32-gcc
-#CFLAGS=-Og -Wall -pedantic -flto -g -D_POSIX_C_SOURCE -DFS_TIME_T=int64_t
+# CC=i686-w64-mingw32-gcc
+# CFLAGS=-Og -Wall -pedantic -flto -g -D_POSIX_C_SOURCE -DFS_TIME_T=int64_t
 
 LFLAGS=-lm
 ifneq ("$(wildcard spa.c)","")

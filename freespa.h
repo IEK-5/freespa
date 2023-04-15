@@ -37,18 +37,6 @@
  *    Dr. Bart E. Pieters 2022                                   *
  *                                                               *
  *****************************************************************/
-#ifndef	_TIME_H_
-#include <time.h>
-#endif
-#ifndef _FREESPA_H_
-#define _FREESPA_H_
-
-#ifndef FS_TIME_T
-#define FS_TIME_T time_t
-#else
-#include <stdint.h>
-#define FS_CUSTOM_TIME_T
-#endif
 
 	
 /* see the DOC.md file for documentation */
@@ -68,8 +56,27 @@
  * Inc., Richmond, Virginia, USA.
  */
 
+#ifndef	_TIME_H_
+#include <time.h>
+#endif
+#ifndef _FREESPA_H_
+#define _FREESPA_H_
+
+#ifndef FS_TIME_T
+/* per default FS_TIME_T is the time_t type
+ * This is most convenient but requires a 64bit signed integer time_t 
+ * type
+ */
+#define FS_TIME_T time_t
+#else
+/* Not using the time_t type. The simplest solution is an int64_t
+ * for which we need stdint.h
+ */
+#include <stdint.h>
+#define FS_CUSTOM_TIME_T
+#endif
 /* We require a 64bit signed integer time_t type
- * These asserts check for integer, 64bit and signedness
+ * These compile time asserts check for integer, 64bit and signedness
  */
 _Static_assert ((FS_TIME_T) 1.5 == 1  , "error: FS_TIME_T type is not integer");
 _Static_assert (sizeof(FS_TIME_T) == 8, "error: FS_TIME_T type is not 64 bit");
@@ -137,19 +144,7 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
                    double p, double T, 
                    sol_pos (*refract)(sol_pos,double*,double,double,double));
 
-// Utilities:
-/* julian unix time routines
- * For modern day it should be equivalent to the standard routines
- * in time.h (apart from the fact that mkgmtime is absent on many 
- * platforms). However, these routines of freespa have a 10-day gap 
- * between the Julian and Gregorian calendar where the Julian calendar 
- * ends on October 4, 1582 (JD = 2299160), and the next day the 
- * Gregorian calendar starts on October 15, 1582.
- * 
- * This definition of unix time makes it compatible with the julian day 
- * as it is computed from a date in freespa, i.e. the julian days all 
- * have 86400 seconds. 
- */
+// julian unix time routines
 // get delta_t value from internal tables
 double get_delta_t(struct tm *ut);
 // populate a time struct with UTC from unix time

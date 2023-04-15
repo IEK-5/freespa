@@ -44,6 +44,10 @@
 #include <math.h>
 #include <string.h>
 #include <getopt.h>
+#if defined(_WIN32) || defined(_WIN64) 
+#include <windows.h>
+#include <locale.h>
+#endif
 #include "freespa.h"
 
 
@@ -254,19 +258,30 @@ void PrintUTC(struct tm *ut, char *buffer, int n)
 	strftime (buffer,n,"%Y-%m-%d %H:%M:%S   UTC",ut);
 }
 
-#ifndef FS_CUSTOM_TIME_T
 void PrintLTZ(struct tm *ut, char *buffer, int n)
 {
 	FS_TIME_T tc=mkgmjtime(ut);
 	struct tm lt={0};
+#ifdef FS_CUSTOM_TIME_T
+	time_t tt=(time_t)tc;
+	// we might not be using time_t for a reason
+	if ((FS_TIME_T)tt!=tc)
+	{
+		fprintf(stderr,"Error: failed to convert epoch time to a time_t type\n");
+		strncpy(buffer, "unknown", n);
+		return;
+	}
+	localtime_r(&tt, &lt);
+#else
 	localtime_r(&tc, &lt);
-#ifdef _WIN64
+#endif
+
+#if defined(_WIN64) || defined(_WIN32)
 	strftime (buffer,n,"%Y-%m-%d %H:%M:%S %Z",&lt);
 #else
 	strftime (buffer,n,"%Y-%m-%d %H:%M:%S %5Z",&lt);
 #endif
 }
-#endif /*#ifndef FS_CUSTOM_TIME_T*/
 
 void PrintLST(struct tm *lst, char *buffer, int n)
 {
@@ -291,6 +306,11 @@ int main(int argc, char **argv)
 	// per default we use the current time
 	FS_TIME_T tc=time(NULL);
 	sol_pos (*aparent)(sol_pos,double*,double, double, double)=&ApSolposBennet;
+#if defined(_WIN32) || defined(_WIN64) 
+    UINT CODEPAGE_ORIGINAL = GetConsoleOutputCP();
+    SetConsoleOutputCP(65001);
+    setlocale(LC_ALL, "C");
+#endif
 	
 	
 	struct tm ut={0};
@@ -391,14 +411,10 @@ int main(int argc, char **argv)
 					fprintf(stderr, "Error: --time (-t) requires a unix time\n");
 					return 1;	
 				}
-				tc=atol(optarg);
+				tc=atoll(optarg);
 				break;
 			case 'l':
-#ifndef FS_CUSTOM_TIME_T
 				local=1;
-#else
-				fprintf(stderr, "Warning: localtime not available when using a non standard time_t type\n");		
-#endif
 				break;
 			case 's':
 				tsoltime=(!tsoltime);
@@ -506,10 +522,8 @@ int main(int argc, char **argv)
 		printf("| Time --------------------------------------\n");
 		PrintUTC(&ut, buffer, 80);
 		printf("UTC               : %s\n", buffer);
-#ifndef FS_CUSTOM_TIME_T
 		PrintLTZ(&ut, buffer, 80);
 		printf("LOC               : %s\n", buffer);	
-#endif	
 		lst=TrueSolarTime(p, 0, 0, lon, lat);
 		PrintLST(&lst, buffer, 80);
 		printf("LST               : %s\n", buffer);
@@ -553,11 +567,9 @@ int main(int argc, char **argv)
 			// go through the day events
 			if (D.status[chrono[i]]==0)
 			{
-#ifndef FS_CUSTOM_TIME_T
 				if (local)
 					PrintLTZ(D.ev+chrono[i], buffer, 80);
 				else
-#endif
 					PrintUTC(D.ev+chrono[i], buffer, 80);
 				printf("%s : %s\n", solevents[chrono[i]],buffer);
 					
@@ -571,6 +583,10 @@ int main(int argc, char **argv)
 		}	
 
 		printf("---------------------------------------------\n");
-	}
+	}	
+#if defined(_WIN32) || defined(_WIN64) 
+    SetConsoleOutputCP(CODEPAGE_ORIGINAL);
+    setlocale(LC_ALL, "");
+#endif
 	exit(0);
 }
