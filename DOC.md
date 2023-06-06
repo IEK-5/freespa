@@ -270,24 +270,22 @@ NREL spa discussed here is not explicitly documented but can be found
 in the source code of NREL spa [5].
  
 One obvious difference is that freespa provides a simple interface to 
-determine Δt values form internal tables, if so desired. It should be 
-noted that NREL spa limits the range of acceptable Δt values to +-8000. 
-This seems a rather arbitrary limit that ignores the fact that this 
-limit only holds for the time period ranging from approximately 
-245 -- 3400 [3]. This is probably fine for most applications. 
-Nevertheless, the authors of NREL spa claim the model is accurate for 
-the period -2000 -- 6000 [6].
+determine Δt values form internal tables, if so desired. Furthermore, 
+it should be noted that NREL spa limits the range of acceptable Δt 
+values to +-8000. This seems a rather arbitrary limit that ignores the 
+fact that this limit only holds for the time period ranging from 
+approximately 245 -- 3400 [3]. This is probably fine for most 
+applications. Nevertheless, the authors of NREL spa claim the model is 
+accurate for the period -2000 -- 6000 [6].
 
 Both NREL's SPA and freespa can compute sunrise, transit, and sunset. 
-The sunrise/transit/sunset routines in NREL's spa are probably more 
-efficient. However, the accuracy of NREL spa is not guaranteed and I 
-incidentally find offsets in zenith angles of up to 0.1°, even when 
-limiting the range of latitudes between -65--65°. One might argue that 
-determining the exact sunrise and set times is always inaccurate due 
-atmospheric refraction effects [2]. On the other hand, it is 
-unnecessary to add model uncertainties to a problem that is already 
-hard. The freespa routines use iterative methods to find an accurate 
-solution (within one second _or_ within 0.05°). 
+The sunrise/transit/sunset routines in NREL's spa are computationally 
+more efficient. However, the accuracy of NREL spa is not guaranteed or 
+verified. Errors of 0.1° in the solar elevation are not uncommon. 
+However, it is notoriously hard to compute exact sunrise and set times
+due to atmospheric refraction effects [2]. Nevertheless, freespa 
+computes sunset and sunrise times to an accuracy of 0.05° _or_ one 
+second (time). 
 
 Another limitation of NREL's spa sunrise/set routine is that it does 
 not compute a sunrise/set event if _one_ of the two events does not 
@@ -295,13 +293,13 @@ happen. For example, for the the first day in a year that the sun does
 not set at some location (e.g. high up north somewhere in summer), 
 NREL's spa will not compute when the sun rises.
 
-In NREL's spa implementation of an atmospheric refraction model there 
-is no geometric dip. This means that NREL spa always assumes the 
-horizon is at an elevation of 0°. At higher elevation, this assumption 
-may be inaccurate.
+Unlike NREL's spa, freespa can compute, in addition to sunrise/set, 
+various dawn and dusk times, namely civil, nautical, and astronomical 
+dawn and dusk.
 
-In addition to computing sunrise/set times freespa can compute various 
-dawn and dusk times (civil, nautical, and astronomical dawn and dusk).
+In NREL's spa implementation of atmospheric refraction does not account 
+for the geometric dip. This means that NREL spa always assumes the 
+horizon is at an elevation of 0°.
 
 ## References
 [1] J. Meeus, Astronomical Algorithms, second ed. Willmann-Bell, Inc., Richmond, Virginia, USA. (1998): 105-108
