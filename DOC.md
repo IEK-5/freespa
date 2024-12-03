@@ -1,3 +1,4 @@
+
 #Documentation freespa
 
 ## Units
@@ -239,7 +240,7 @@ windows systems [3]. Furthermore, they adhere to the 10-day gap between
 the Julian and Gregorian calendar where the Julian calendar ends on 
 October 4, 1582 (JD = 2299160), and the next day the Gregorian calendar 
 starts on October 15, 1582. Thus these routines provide a historic 
-extension of unix time before October 15, 1582.
+extension of UNIX time before October 15, 1582.
 
 For many freespa routines we need Δt values. In most cases one can suffice 
 with passing a NULL pointer, which will signal freespa to determine an 
@@ -260,14 +261,13 @@ resorts to a crude model by Morrison and Stephenson [4]
 where y is the year, and Δt is in seconds.
 
 ## Differences with NREL spa
-Freespa was developed due to license issues with NREL's spa code. As such 
-the goal was to more or less re-implement NREL spa. Thus the results are 
-generally identical or very similar. The interface is, however, 
-different (i.e. freespa is _not_ a drop-in replacement). In addition 
-there are some differences in computational details. Some of those 
-details might be considered bugs. Note that some of the behavior of 
-NREL spa discussed here is not explicitly documented but can be found 
-in the source code of NREL spa [5].
+Freespa was developed due to license issues with NREL's spa code. As 
+such the goal was to more or less re-implement NREL spa. Thus the 
+results are generally identical or very similar. The interface is, 
+however, different (i.e. freespa is _not_ a drop-in replacement). In 
+addition there are some differences in computational details. Some of 
+here discussed behavior of NREL spa is not explicitly documented 
+anywhere but is inferred from the NREL spa source code [5].
  
 One obvious difference is that freespa provides a simple interface to 
 determine Δt values form internal tables, if so desired. Furthermore, 
@@ -277,6 +277,38 @@ fact that this limit only holds for the time period ranging from
 approximately 245 -- 3400 [3]. This is probably fine for most 
 applications. Nevertheless, the authors of NREL spa claim the model is 
 accurate for the period -2000 -- 6000 [6].
+
+There are several differences in how atmospheric refraction is handled 
+in freespa as compared to NREL's spa. NREL's spa requires the user to 
+provide a value for the atmospheric refraction at sunrise/set. This 
+value is used to determine whether the sun is above the horizon and 
+thus whether the sparent solar position differs for the true solar 
+position. 
+
+This solution, where the used provides a refraction angle at 
+sunrise/set, is somewhat inconsistent as NREL's spa does not verify 
+whether the user provided atmospheric refraction is consistent with 
+NREL's own atmospheric refraction model (for example, it possible that 
+NREL's spa corrects the true solar position to a solar position 
+below the horizon, if the user provides a too low refraction value). In 
+freespa we have both a refraction model computing the aparent solar 
+position from the true position, as well as an inverse model computing 
+the true position given an aparent position. Thus, we save the user 
+from the burden of finding the appropriate refraction angle.
+
+Another difference is that freespa provides two parametrizations for 
+the Bennet refraction model. For reference we provide the original 
+parametrization [1], as is also used in NREL's spa. Furthermore, we 
+provide an updated parametrization, which has a better agreement with 
+the refraction tables in "The Nautical Almanac" of the 2004 and later 
+editions [2].
+
+NREL's spa implementation of atmospheric refraction does not 
+account for the geometric dip. This means that NREL spa always assumes 
+the horizon is at an elevation of 0°. In freespa one may provide a 
+value for the geometric dip, or have freespa compute optionally compute 
+a value based on the observer elevation (assuming a sea level horizon).   
+
 
 Both NREL's SPA and freespa can compute sunrise, transit, and sunset. 
 The sunrise/transit/sunset routines in NREL's spa are computationally 
@@ -297,9 +329,6 @@ Unlike NREL's spa, freespa can compute, in addition to sunrise/set,
 various dawn and dusk times, namely civil, nautical, and astronomical 
 dawn and dusk.
 
-In NREL's spa implementation of atmospheric refraction does not account 
-for the geometric dip. This means that NREL spa always assumes the 
-horizon is at an elevation of 0°.
 
 ## References
 [1] J. Meeus, Astronomical Algorithms, second ed. Willmann-Bell, Inc., Richmond, Virginia, USA. (1998): 105-108
