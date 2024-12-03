@@ -67,7 +67,7 @@ mv deltat.preds future_delta_t.dat
 
 # let the current delta_t from maia.usno.navy.mil take presidence
 deltatdata 0 "current_delta_t.dat" > tmp.dat
-first=$(head -n 1 curr_t.dat |awk '{print $1}')
+first=$(head -n 1 tmp.dat |awk '{print $1}')
 rm tmp.dat
 historicupto $first $ref > new_hist_delta_t.dat
 deltatdata 0 "current_delta_t.dat" >> new_hist_delta_t.dat
@@ -81,7 +81,7 @@ echo "Added new observed data from $prev up to $last"
 cat new_hist_delta_t.dat >tmp.dat
 deltatpreds $last future_delta_t.dat >> tmp.dat
 
-N=$(wc -l tmp.dat|egrep -o [0-9]+)
+N=$(wc -l tmp.dat|grep -Eo [0-9]+)
 echo "new dt table length $N"
 echo "/* delta t table from iers data */" >freespa_dt_table_new.h
 echo "#define NDT $N" >>freespa_dt_table_new.h
