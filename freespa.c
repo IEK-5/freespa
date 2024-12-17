@@ -1091,7 +1091,13 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	
 	if (InputCheck(delta_ut1, lon, lat, e, p, T))
 		return D;
-		
+	
+	if (!refract) // no refraction function provided. For simplicity we fall back to bennet in vacuum.
+	{
+		refract=&ApSolposBennet;
+		p=0;
+	}
+	
 	t=mkgmjtime(ut);
 	// find the closest transit
 	tc=FindSolTime(t, 12, 0, 0, delta_t, delta_ut1, lon, lat);
