@@ -176,6 +176,8 @@ This returns a solar_day struct. The input is:
 * `gdip`:      geometric dip
 * `p`:         pressure (in mbar)
 * `T`:         Temperature (in °C)
+* `refract`:   pointer to the refraction model (e.g. ApSolposBennet) or `NULL` (use true solar positions)
+
 
 In some cases a user may not be interested in all the computed events. 
 It is possible to enable/disable computing specific events. To this end
