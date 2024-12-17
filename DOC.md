@@ -1,5 +1,26 @@
+# Freespa Documentation
 
-#Documentation freespa
+Freespa is a c library to compute the solar position. Just like NREL's 
+SPA [Reda], it implements the algorithms developed by [Meeus], and thus 
+provides more or less identical functionality. Freespa was developed to 
+address licensing issues with NREL SPA code [NRELSPA]. 
+
+
+This document is a technical description of Freepa's routines and data 
+structures. The Outline is a s follows:
+
+* [Units](#units) : Physical Units
+* [Data Types and Structures](#data-types-and-structures): Describes the
+data structures and types defined by the library
+* [Solar Position Routines](#solar-position-routines): Routines to 
+compute the real and aparent position of the sun
+* [Solar Day Events](#solar-day-events): Routines to compute the solar 
+events (e.g. sunrise, sunset, etc.)
+* [Equinoxes and Solstices](#equinoxes-and-solstices): Routines to 
+compute the Equinoxes and Solstices.
+* [Δt Values](#δt-values):  Routines to obtain Δt Values
+* [Differences with NREL SPA](#differences-with-nrel-spa): A short 
+description of the main differences with NREL SPA
 
 ## Units
 Freespa uses the following units:
@@ -10,337 +31,603 @@ Freespa uses the following units:
 - time is generally specified in UTC
 
 
-## Data Types and Structures:
-### time_t type
-Per default freespa uses the `time_t` type to represent time in seconds 
-since the epoch. The freespa routines rely on a 64bit signed integer 
-type to represent the time since the epoch. On some platforms, however, 
-`time_t` does not meet this requirement (e.g. 32 bit linux and windows
-`time_t` is a 32 bit signed integer). If your platform has a `time_t` 
-which is not a signed 64bit integer type, youy may still use freespa by
-defining a custom `time_t` type. 
 
-In freespa the used `time_t` type is defined in the preprocessor 
-variable `FS_TIME`. If the variable is not defined, it will be set to 
-`FS_TIME_T=time_t`. Otherwise, freespa will use the type provided by 
-the defined `FS_TIME_T` value. For example, by passing 
-`FS_TIME_T=int64_t` to the preprocessor, freespa will use an `int64_t`
-type for the time since the epoch. When a custom `FS_TIME` value is 
-used, freespa will set a preprocessor define `FS_CUSTOM_TIME_T`, which 
-may be used to test if a custom `FS_TIME` value is used. 
+## Data Types and Structures
 
-Note that using a custom `FS_TIME` will prevent you from using the 
-standard time functions in `time.h` that rely on the `time_t` type. 
-However, freespa also provides some functionality in handling epoch 
-time values (see the section on Time Utilities).
+### `time_t` Type
 
-At compile time freespa will assert if the provided `FS_TIME` type is 
-a 64 bit signed integer type.
+By default, Freespa uses the `time_t` type to represent time as the 
+number of seconds since the epoch (1970-01-01 00:00:00 UTC). However, 
+the Freespa routines require a 64-bit signed integer type to represent 
+time, ensuring sufficient range for various computations. 
 
-### Data Structures
-In freespa.h several data structures are defined. The `sol_pos` 
-structure is defined as:
+On some platforms, the default `time_t` implementation may not meet 
+these requirements. For example:
 
-    typedef struct sol_pos {
-    	double z, a; // zenith, azimuth
-    	int E; // error flag
-    } sol_pos;
+- **32-bit Linux**: `time_t` is a 32-bit signed integer.
+- **Windows (32-bit)**: `time_t` is also a 32-bit signed integer.
 
-where z is the zenith angle, and a the azimuth. The integer E is an 
-error flag which may contain the following error codes:
+If your platform's `time_t` is not a 64-bit signed integer, you can 
+still use Freespa by defining a custom time type.
 
-    #define _FREESPA_DEU_OOR		0X01	// ΔUT1 out of range
-    #define _FREESPA_LON_OOR		0X02	// longitude out of range
-    #define _FREESPA_LAT_OOR		0X04	// latitude out of range
-    #define _FREESPA_ELE_OOR		0X08	// elevation out of range
-    #define _FREESPA_PRE_OOR		0X10	// pressure out of range
-    #define _FREESPA_TEM_OOR		0X20	// temperature out of range
-    #define _FREESPA_DIP_OOR		0X40	// geometric dip out of range
-    #define _FREESPA_GMTIMEF		0X80	// time conversion error
+On a side note: Windows (64-bit) `time_t` is a signed 64-bit integer, 
+which can be used. However, time handling routines defined in time.h, 
+such as `gmtime`, for some reason cannot handle dates before the epoch 
+or after Dec 31 23:59:59 3000.
 
-which may be combined with a binary OR. If all is OK E=0.
+#### Customizing the `time_t` Type
 
-In case you are interested in computing the daily events such as 
-sunrise and set, you need the `solar_day` struct:
- 
-    typedef struct solar_day {
-    	struct tm ev[11];
-    	FS_TIME_T t[11];
-    	double E[11];
-    	int status[11];
-    } solar_day;
+Freespa determines the time type via the preprocessor variable 
+`FS_TIME_T`:
 
-This struct contains the following elements:
+- **Default Behavior**:  
+  If `FS_TIME_T` is not defined, Freespa defaults to `time_t`.
 
-- ev: an array of time structs for all events of the day
-- t: corresponding unix times
-- E: array with error values (deviation of solar zenith angle, in rad)
-- status: integer array with status flags
+- **Custom Behavior**:  
+  Define `FS_TIME_T` to provide an alternative type for representing 
+  time. For example, passing the following to your compiler:
 
-The solar events are defined and indexed as:
+  ```c
+  -DFS_TIME_T=int64_t
+  ```
 
-     0:		solar midnight before time t
-     1:		solar transit closest to time t
-     2:		solar midnight after time t
-     3:		sunrise
-     4:		sunset
-     5:		civil dawn
-     6:		civil dusk
-     7:		nautical dawn
-     8:		nautical dusk
-     9:		astronomical dawn
-     10:	astronomical dusk
+  This tells Freespa to use `int64_t` for time representation instead 
+  of `time_t`.
 
-Note that in this definition of a "solar day", not all days have 86400
+#### Using a Custom Type
 
-The status flag may contain the following values:
+When a custom `FS_TIME_T` is used, Freespa defines the preprocessor 
+macro `FS_CUSTOM_TIME_T`. You can use this macro to check if a custom 
+time type is being used in your code:
 
-    #define _FREESPA_EV_ERR       20  // Error
-    #define _FREESPA_EV_NA        10  // Not Computed
-    #define _FREESPA_EV_OK         0  // All OK
-    #define _FREESPA_EV_SUNABOVE   1  // Sun always above (e.g. midnight sun)
-    #define _FREESPA_EV_SUNBELOW  -1  // Sun always below (e.g. polar night)
-
-## Input Data Ranges
-There are some limits to the accepted input ranges of various arguments.
-In general freespa does not limit much and thus allows for some pretty 
-unreasonable input, use at your own discretion.
-
-Valid input to freespa routines adheres to *at least* the following ranges:
-
-- ΔUT1:  -1 ≤ ΔUT1 ≤1
-- longitude: -π ≤ lon ≤ π
-- latitude: -π/2 ≤ lat ≤ π/2
-- elevation: Rearth < E, where Rearth = 6378136.6 m
-- pressure: 0 ≤ p ≤ 5000
-- Temperature: -273.15 °C ≤ T
-
-No other limits are imposed on other input variables, such as Δt, thus
-the limits depends on the underlying data types.
+```c
+#ifdef FS_CUSTOM_TIME_T
+    // Custom time type is in use
+#endif
+```
 
 
-## Main SPA Routines
-The main routine to compute the real solar position is:
+#### Important Considerations
 
-`sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
-            double lat, double e);`   
+1. **Standard Library Incompatibility**:  
+   Using a custom `FS_TIME_T` type means you cannot use standard 
+   `time.h` functions that rely on `time_t`. Instead, you will need to 
+   rely on Freespa's utility functions for epoch time manipulation 
+   (see [Time Utilities](#time-utilities)).
 
-where:
-
-* `struct tm *ut`: Standard time struct. Should contain UTC values
-* `double *delta_t`: pointer to Δt value, if it is NULL Δt is determined from internal tables
-* `double delta_ut1`: deviation between terrestrial time and UTC (-1.0..1.0 s)
-* `double lon`: longitude in radians
-* `double lat`: latitude in radians
-* `double e`: Elevation in m
-
-This computes the _real_ solar position. In practice the solar position 
-is affected by refraction. To compute the apparent position of the sun 
-several routines may be used:
-
-    sol_pos ApSolposBennet(sol_pos P, double *gdip, double e, double p, double T);
-    
-and
-
-    sol_pos ApSolposBennetNA(sol_pos P, double *gdip, double e, double p, double T);
-
-Both routines work the same and only differ in the used model 
-coefficients. The input for these routines is as follows:
-
-* `P`:	    real solar position
-* `gdip`:	geometric dip, i.e. how far the horizon is below the observer (in rad). If this pointer is NULL the geometric dip is computed from the observer elevation (assuming the horizon is at sea level)
-* `e`:		observer elevation (in meter)
-* `p`:		pressure (in mbar)
-* `T`:		Temperature (in °C)
-
-The solar refraction is computed with the simple Bennet equation [1]. 
-The BennetNA routines are based on the modified coefficients as 
-published in [2].
+2. **Compile-Time Assertion**:  
+   Freespa validates that the specified `FS_TIME_T` is a 64-bit signed 
+   integer at compile time. If the type is incompatible, the 
+   compilation will fail with an error.
+   
 
 
-To compute the solar events of a day freespa offers:
+### Data Structures and Input Ranges
+#### `sol_pos` Structure
 
-    solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1, 
-                       double lon, double lat, double e, double *gdip, 
-                       double p, double T, 
-                       sol_pos (*refract)(sol_pos,double*,double,double,double));
+The `sol_pos` structure, defined in `freespa.h`, is used to represent 
+the position of the sun. It includes the zenith angle, azimuth, and an 
+error flag.
 
-This returns a solar_day struct. The input is:
+```c
+typedef struct sol_pos {
+    double z; // Zenith angle
+    double a; // Azimuth
+    int E;    // Error flag
+} sol_pos;
+```
 
-* `ut`:	       pointer to time struct with UTC time
-* `delta_t`:   pointer to Δt value, or NULL (use internal tables)
-* `delta_ut1`: delta_ut1 
-* `lon`:       longitude (in radians)
-* `lat`:       latitude (in radians)
-* `e`:         observer elevation (in meter)
-* `gdip`:      geometric dip
-* `p`:         pressure (in mbar)
-* `T`:         Temperature (in °C)
-* `refract`:   pointer to the refraction model (e.g. ApSolposBennet) or `NULL` (use true solar positions)
+##### Error Flags (`E`)
+
+The error flag `E` can take the following values, which may be combined 
+using a binary OR (`|`):
+
+```c
+#define FREESPA_DEU_OOR  0X01  // ΔUT1 out of range
+#define FREESPA_LON_OOR  0X02  // Longitude out of range
+#define FREESPA_LAT_OOR  0X04  // Latitude out of range
+#define FREESPA_ELE_OOR  0X08  // Elevation out of range
+#define FREESPA_PRE_OOR  0X10  // Pressure out of range
+#define FREESPA_TEM_OOR  0X20  // Temperature out of range
+#define FREESPA_DIP_OOR  0X40  // Geometric dip out of range
+#define FREESPA_GMTIMEF  0X80  // Time conversion error
+```
+
+- If all inputs are valid, `E = 0`.
 
 
-In some cases a user may not be interested in all the computed events. 
-It is possible to enable/disable computing specific events. To this end
-one can modify the SDMASK integer (globally defined, i.e. not thread safe).
-The following flags are defined
+#### `solar_day` Structure
 
-    #define _FREESPA_SUNRISE 0X01
-    #define _FREESPA_SUNSET  0X02
-    #define _FREESPA_CVDAWN  0X04
-    #define _FREESPA_CVDUSK  0X08
-    #define _FREESPA_NADAWN  0X10
-    #define _FREESPA_NADUSK  0X20
-    #define _FREESPA_ASDAWN  0X40
-    #define _FREESPA_ASDUSK  0X80
+The `solar_day` structure represents daily solar events, including 
+times, Unix timestamps, zenith angle deviations, and status flags.
 
-By using a binary OR operation one can enable or disable the computation 
-of specific events. Per default SDMASK is defined as:
+```c
+typedef struct solar_day {
+    struct tm ev[11];    // Array of time structs for events
+    FS_TIME_T t[11];     // Corresponding Unix times
+    double E[11];        // Deviation of solar zenith angle (radians)
+    int status[11];      // Status flags for each event
+} solar_day;
+```
 
-    SDMASK==(_FREESPA_SUNRISE|_FREESPA_SUNSET|_FREESPA_CVDAWN|_FREESPA_CVDUSK|_FREESPA_NADAWN|_FREESPA_NADUSK|_FREESPA_ASDAWN|_FREESPA_ASDUSK)
+##### Solar Event Indices
 
-or 
+The array indices correspond to the following solar events:
 
-    SDMASK=0XFF;
+| Index | Event                             |
+|-------|-----------------------------------|
+| 0     | Solar midnight before time `t`   |
+| 1     | Solar transit closest to time `t`|
+| 2     | Solar midnight after time `t`    |
+| 3     | Sunrise                          |
+| 4     | Sunset                           |
+| 5     | Civil dawn                       |
+| 6     | Civil dusk                       |
+| 7     | Nautical dawn                    |
+| 8     | Nautical dusk                    |
+| 9     | Astronomical dawn                |
+| 10    | Astronomical dusk                |
 
-which triggers the computation of all 11 solar day events. If one only 
-wants to compute sunrise and sunset, one can define:
- 
-    SDMASK=(_FREESPA_SUNRISE|_FREESPA_SUNSET);
+**Note**: In this definition of a "solar day," not all days have exactly 
+86400 seconds.
 
+##### Status Flags
+
+The `status` array contains flags indicating the status of each solar 
+event:
+
+```c
+#define FREESPA_EV_ERR        20  // Error
+#define FREESPA_EV_NA         10  // Not computed
+#define FREESPA_EV_OK          0  // All OK
+#define FREESPA_EV_SUNABOVE    1  // Sun always above (e.g., midnight sun)
+#define FREESPA_EV_SUNBELOW   -1  // Sun always below (e.g., polar night)
+```
+
+
+#### Input Data Ranges
+
+Valid input ranges for Freespa routines are outlined below. Freespa 
+generally imposes minimal restrictions, allowing for unusual inputs 
+where reasonable. 
+
+| Parameter     | Valid Range                                         |
+|---------------|-----------------------------------------------------|
+| **ΔUT1**      | $-1 ≤ ΔUT1 ≤ 1$                                     |
+| **Longitude** | $-π ≤ \text{lon} ≤ π$                                      |
+| **Latitude**  | $-π/2 ≤ \text{lat} ≤ π/2$                                  |
+| **Elevation** | $E > -R_\mathrm{earth} (\text{where }R_\mathrm{earth} = 6378136.6\,\mathrm{m})$        |
+| **Pressure**  | $0 ≤ p ≤ 5000$                                        |
+| **Temperature** | $-273.15 °C ≤ T$                                  |
+
+##### Notes
+
+- **Δt (Delta T)**: Freespa does not impose explicit limits on Δt. 
+Valid ranges depend on the underlying data types used in your 
+implementation.
+- **Other Variables**: For any other inputs not mentioned here, limits 
+depend on their respective data types.
+
+
+Here’s an improved and clearer version of your documentation:
+
+
+## Solar Position Routines
+
+### Real Solar Position
+
+The primary routine for computing the real solar position is:
+
+```c
+sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
+            double lat, double e);
+```
+
+#### Parameters
+
+- **`struct tm *ut`**:  
+  Pointer to a standard `tm` structure containing UTC time values.
+
+- **`double *delta_t`**:  
+  Pointer to the Δt value. If `NULL`, Δt is determined from internal tables.
+
+- **`double delta_ut1`**:  
+  Deviation between terrestrial time and UTC ( $-1.0 ≤$ `delta_ut1` $≤ 1.0$ s).
+
+- **`double lon`**:  
+  Longitude in radians.
+
+- **`double lat`**:  
+  Latitude in radians.
+
+- **`double e`**:  
+  Observer elevation in meters.
+
+This function calculates the **real solar position**, which does not 
+account for atmospheric refraction.
+
+
+### Apparent Solar Position
+
+To compute the **apparent position** of the sun, accounting for 
+atmospheric refraction, use the following routines:
+
+#### `ApSolposBennet`
+
+```c
+sol_pos ApSolposBennet(sol_pos P, double *gdip, double e, double p, double T);
+```
+
+#### `ApSolposBennetNA`
+
+```c
+sol_pos ApSolposBennetNA(sol_pos P, double *gdip, double e, double p, double T);
+```
+
+Both functions work similarly, differing only in their model coefficients:
+- `ApSolposBennet`: Uses the original Bennet equation [Meeus].
+- `ApSolposBennetNA`: Uses modified coefficients from [Wilsen].
+
+#### Parameters
+
+- **`P`**:  
+  The real solar position (`sol_pos` struct) computed by `SPA`.
+
+- **`gdip`**:  
+  Pointer to the geometric dip (in radians). Represents how far the 
+  horizon is below the observer. If `NULL`, it is computed based on 
+  observer elevation, assuming the horizon is at sea level.
+
+- **`e`**:  
+  Observer elevation in meters.
+
+- **`p`**:  
+  Atmospheric pressure in mbar.
+
+- **`T`**:  
+  Temperature in degrees Celsius.
+
+
+## Solar Day Events
+
+To compute all solar events for a given day, use:
+
+```c
+solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1, 
+                   double lon, double lat, double e, double *gdip, 
+                   double p, double T, 
+                   sol_pos (*refract)(sol_pos,double*,double,double,double));
+```
+
+### Parameters
+
+- **`ut`**:  
+  Pointer to a `tm` structure containing UTC time.
+
+- **`delta_t`**:  
+  Pointer to the Δt value. If `NULL`, Δt is determined from internal 
+  tables.
+
+- **`delta_ut1`**:  
+  Deviation between terrestrial time and UTC.
+
+- **`lon`**:  
+  Longitude in radians.
+
+- **`lat`**:  
+  Latitude in radians.
+
+- **`e`**:  
+  Observer elevation in meters.
+
+- **`gdip`**:  
+  Pointer to geometric dip (see `ApSolposBennet`).
+
+- **`p`**:  
+  Atmospheric pressure in mbar.
+
+- **`T`**:  
+  Temperature in degrees Celsius.
+
+- **`refract`**:  
+  Pointer to a refraction model (e.g., `ApSolposBennet`). If `NULL`, 
+  true solar positions are used.
+
+### Returns
+
+A `solar_day` structure containing solar events, including their times, 
+Unix timestamps, zenith angle deviations, and status flags.
+
+
+### Event Selection with `SDMASK`
+
+In some cases, you may want to compute only specific solar events. The 
+`SDMASK` integer can be modified globally (not thread-safe) to enable 
+or disable specific events. 
+
+#### Event Flags
+
+The following flags are defined:
+
+```c
+#define FREESPA_SUNRISE  0x01  // Sunrise
+#define FREESPA_SUNSET   0x02  // Sunset
+#define FREESPA_CVDAWN   0x04  // Civil dawn
+#define FREESPA_CVDUSK   0x08  // Civil dusk
+#define FREESPA_NADAWN   0x10  // Nautical dawn
+#define FREESPA_NADUSK   0x20  // Nautical dusk
+#define FREESPA_ASDAWN   0x40  // Astronomical dawn
+#define FREESPA_ASDUSK   0x80  // Astronomical dusk
+```
+
+Combine flags using a binary OR (`|`) to enable multiple events. 
+
+#### Default Configuration
+
+By default, `SDMASK` is defined as:
+
+```c
+SDMASK = (FREESPA_SUNRISE | FREESPA_SUNSET | FREESPA_CVDAWN | FREESPA_CVDUSK |
+          FREESPA_NADAWN | FREESPA_NADUSK | FREESPA_ASDAWN | FREESPA_ASDUSK);
+```
+
+This computes all 11 solar day events. Alternatively, it can be expressed as:
+
+```c
+SDMASK = 0xFF;
+```
+
+#### Example: Sunrise and Sunset Only
+
+To compute only sunrise and sunset:
+
+```c
+SDMASK = (FREESPA_SUNRISE | FREESPA_SUNSET);
+```
+
+## Equinoxes and Solstices
+
+The `Freespa` library provides functionality to compute the year's 
+Equinoxes and Solstices. These events can be calculated as either a 
+`struct tm` or an `FS_TIME` integer. 
+
+### `mkgmEQSOtime`
+
+```c
+struct tm *mkgmEQSOtime(struct tm *ut, int E, double *delta_t);
+```
+
+This function computes the specified Equinox or Solstice event and 
+returns the result as a `struct tm`. 
+
+### `mkgmEQSOjtime`
+
+```c
+FS_TIME_T mkgmEQSOjtime(struct tm *ut, int E, double *delta_t);
+```
+
+This function computes the specified Equinox or Solstice event and 
+returns the result as an `FS_TIME_T` integer.
+
+
+### Parameters
+
+Both functions take the following parameters:
+
+- **`ut`**:  
+  Pointer to a `struct tm` containing the UTC time to base the calculation on.  
+  **Note**: This input is overwritten with the computed event's time.
+
+- **`E`**:  
+  The event to compute, represented as an integer. (See [Event Definitions](#event-definitions) below.)
+
+- **`delta_t`**:  
+  Pointer to a `double` representing the value of Δt (the difference between Earth's observed time and uniform time).  
+  Pass `NULL` to use the library's internal Δt tables.
+
+---
+
+### Event Definitions
+
+The following constants are defined in `freespa.h` to specify the type of Equinox or Solstice event (`E` parameter):
+
+```c
+#define FREESPA_SPRINGEQ  0  // Vernal (Spring) Equinox
+#define FREESPA_SUMMERSO  1  // Summer Solstice
+#define FREESPA_AUTUMNEQ  2  // Autumnal (Fall) Equinox
+#define FREESPA_WINTERSO  3  // Winter Solstice
+```
+
+### Event Mapping
+
+| Constant              | Description                |
+|-----------------------|----------------------------|
+| `FREESPA_SPRINGEQ`    | Vernal (Spring) Equinox    |
+| `FREESPA_SUMMERSO`    | Summer Solstice            |
+| `FREESPA_AUTUMNEQ`    | Autumnal (Fall) Equinox    |
+| `FREESPA_WINTERSO`    | Winter Solstice            |
+
+---
+Here’s an improved and more organized version of your documentation:
+
+---
 
 ## Time Utilities
-Finally freespa offers several utilities to work with time. The 
-equation of time describes the variation of the true solar time w.r.t. 
-mean solar time. Freespa offers the `TrueSolarTime` routine to 
-determine the true solar time:
 
-    struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, 
-						    double lon, double lat);
+### Equation of Time
 
-The function returns a time struct representing the true solar time 
-(the only non-UTC time used in freespa). The input to this function is:
+The equation of time describes the variation of true solar time 
+relative to mean solar time. Freespa offers the `TrueSolarTime` 
+function to compute the **true solar time**:
 
-* `ut`:	       pointer to time struct with UTC time
-* `delta_t`:   pointer to Δt value, or NULL (use internal tables)
-* `delta_ut1`: delta_ut1 
-* `lon`:	   longitude (in radians)
-* `lat`:	   latitude (in radians)
+```c
+struct tm TrueSolarTime(struct tm *ut, double *delta_t, double delta_ut1, 
+                        double lon, double lat);
+```
 
-In order to handle a custom `FS_TIME_T` type, overcome some of the 
-implementation dependent limitations of `gmtime` and `mkgmtime` on some 
-platforms, and align the `time_t` type to the internally used Julian 
-dates, freespa defines it own conversion routines:
+#### Parameters
 
-    struct tm *gmjtime_r(FS_TIME_T *t, struct tm *ut);
-    struct tm *gmjtime(FS_TIME_T *t);
-    FS_TIME_T mkgmjtime(struct tm *ut);
+- **`ut`**:  
+  Pointer to a `struct tm` with UTC time.
+- **`delta_t`**:  
+  Pointer to the Δt value. If `NULL`, Δt is determined from internal 
+  tables.
+- **`delta_ut1`**:  
+  Deviation between terrestrial time and UTC.
+- **`lon`**:  
+  Longitude in radians.
+- **`lat`**:  
+  Latitude in radians.
 
-These routines work the same as the standard routines defined in 
-`time.h`. However, they may be used with a custom `time_t` type and do 
-not suffer from arbitrary limitations such as those imposed in 64bit 
-windows systems [3]. Furthermore, they adhere to the 10-day gap between 
-the Julian and Gregorian calendar where the Julian calendar ends on 
-October 4, 1582 (JD = 2299160), and the next day the Gregorian calendar 
-starts on October 15, 1582. Thus these routines provide a historic 
-extension of UNIX time before October 15, 1582.
+#### Returns
 
-For many freespa routines we need Δt values. In most cases one can suffice 
-with passing a NULL pointer, which will signal freespa to determine an 
-appropriate value from internal tables. The following function: 
-
-    double get_delta_t(struct tm *ut);
-
-provides an interface to freespa's internal Δt tables. The internal tables 
-contain a historic dataset ranging from the year -2000 to the present day. 
-In addition it uses predictions up to 2034. Beyond this range freespa 
-resorts to a crude model by Morrison and Stephenson [4]
- 
-                        2
-                ⎡y-1820⎤
-     Δt(y) = 32 ⎢──────⎥  - 20
-                ⎣ 100  ⎦
- 
-where y is the year, and Δt is in seconds.
-
-## Differences with NREL spa
-Freespa was developed due to license issues with NREL's spa code. As 
-such the goal was to more or less re-implement NREL spa. Thus the 
-results are generally identical or very similar. The interface is, 
-however, different (i.e. freespa is _not_ a drop-in replacement). In 
-addition there are some differences in computational details. Some of 
-here discussed behavior of NREL spa is not explicitly documented 
-anywhere but is inferred from the NREL spa source code [5].
- 
-One obvious difference is that freespa provides a simple interface to 
-determine Δt values form internal tables, if so desired. Furthermore, 
-it should be noted that NREL spa limits the range of acceptable Δt 
-values to +-8000. This seems a rather arbitrary limit that ignores the 
-fact that this limit only holds for the time period ranging from 
-approximately 245 -- 3400 [3]. This is probably fine for most 
-applications. Nevertheless, the authors of NREL spa claim the model is 
-accurate for the period -2000 -- 6000 [6].
-
-There are several differences in how atmospheric refraction is handled 
-in freespa as compared to NREL's spa. NREL's spa requires the user to 
-provide a value for the atmospheric refraction at sunrise/set. This 
-value is used to determine whether the sun is above the horizon and 
-thus whether the sparent solar position differs for the true solar 
-position. 
-
-This solution, where the used provides a refraction angle at 
-sunrise/set, is somewhat inconsistent as NREL's spa does not verify 
-whether the user provided atmospheric refraction is consistent with 
-NREL's own atmospheric refraction model (for example, it possible that 
-NREL's spa corrects the true solar position to a solar position 
-below the horizon, if the user provides a too low refraction value). In 
-freespa we have both a refraction model computing the aparent solar 
-position from the true position, as well as an inverse model computing 
-the true position given an aparent position. Thus, we save the user 
-from the burden of finding the appropriate refraction angle.
-
-Another difference is that freespa provides two parametrizations for 
-the Bennet refraction model. For reference we provide the original 
-parametrization [1], as is also used in NREL's spa. Furthermore, we 
-provide an updated parametrization, which has a better agreement with 
-the refraction tables in "The Nautical Almanac" of the 2004 and later 
-editions [2].
-
-NREL's spa implementation of atmospheric refraction does not 
-account for the geometric dip. This means that NREL spa always assumes 
-the horizon is at an elevation of 0°. In freespa one may provide a 
-value for the geometric dip, or have freespa compute optionally compute 
-a value based on the observer elevation (assuming a sea level horizon).   
+A `struct tm` representing the **true solar time** (the only non-UTC 
+time used in Freespa).
 
 
-Both NREL's SPA and freespa can compute sunrise, transit, and sunset. 
-The sunrise/transit/sunset routines in NREL's spa are computationally 
-more efficient. However, the accuracy of NREL spa is not guaranteed or 
-verified. Errors of 0.1° in the solar elevation are not uncommon. 
-However, it is notoriously hard to compute exact sunrise and set times
-due to atmospheric refraction effects [2]. Nevertheless, freespa 
-computes sunset and sunrise times to an accuracy of 0.05° _or_ one 
-second (time). 
+### Custom Time Conversion Routines
 
-Another limitation of NREL's spa sunrise/set routine is that it does 
-not compute a sunrise/set event if _one_ of the two events does not 
-happen. For example, for the the first day in a year that the sun does 
-not set at some location (e.g. high up north somewhere in summer), 
-NREL's spa will not compute when the sun rises.
+To handle custom `FS_TIME_T` types, overcome platform-specific 
+limitations of `gmtime` and `mkgmtime`, and align time calculations 
+with Julian dates, Freespa provides the following utilities:
 
-Unlike NREL's spa, freespa can compute, in addition to sunrise/set, 
-various dawn and dusk times, namely civil, nautical, and astronomical 
-dawn and dusk.
+#### Functions
+
+```c
+struct tm *gmjtime_r(FS_TIME_T *t, struct tm *ut);
+struct tm *gmjtime(FS_TIME_T *t);
+FS_TIME_T mkgmjtime(struct tm *ut);
+```
+
+#### Features
+
+- **Custom Time Support**: These functions work with custom `FS_TIME_T` 
+types.
+- **Platform Independence**: Avoids limitations such as those found in 
+64-bit Windows systems.
+- **Historic Date Support**: Handles the transition from Julian to 
+Gregorian calendar:
+  - Julian calendar ends on October 4, 1582 (JD = 2299160).
+  - Gregorian calendar starts on October 15, 1582.
+
+
+## Δt Values
+
+Freespa routines often require Δt values, which represent the 
+difference between Earth's observed time (Universal Time) and uniform 
+time (Terrestrial Time). Freespa provides internal tables and routines 
+to compute these values.
+
+### Internal Tables and Models
+
+1. **Documented Values**:  
+   Freespa uses internal tables and interpolation for Δt values where 
+   documented data is available. These tables include data from 
+   historical observations and predictions.
+
+2. **Predictions**:  
+   The United States Naval Observatory (USNO) publishes Δt predictions 
+   up to approximately 10 years into the future [7]. These predictions 
+   are included in Freespa's internal tables.
+
+3. **Extended Range Model**:  
+   For years beyond the range of the internal tables, Freespa employs 
+   the Morrison and Stephenson model [Morrison]:
+
+   $$
+   \Delta t(y) = 32 \left( \frac{y - 1820}{100} \right)^2 - 20
+   $$
+
+   - where $y$ is the Year.
+
+### Querying Δt Values
+
+To compute the Δt value for a given time, you can use the following 
+function:
+
+```c
+double get_delta_t(struct tm *ut);
+```
+
+#### Parameters
+
+- **`ut`**:  
+  Pointer to a `struct tm` representing UTC time.
+
+#### Returns
+
+The computed Δt value in seconds, based on Freespa's internal tables or 
+the extended model.
+
+
+
+## Differences with NREL SPA
+
+As discussed both NREAL SPA and Freespa base on the algorithms by 
+[Meeus]. So in general one can expect more of less identical results. 
+However, there are some small technical differences and Freespa 
+provides some additional features. Below are the key differences:
+
+### Δt Handling
+
+- **Freespa**: Provides an interface to determine Δt values from 
+internal tables and models (see [Δt Values](#δt-values)).
+- **NREL SPA**: Limits Δt to \(\pm 8000\) seconds [NRELSPA], even 
+though this range only holds for years 245–3400 [Morrison].
+
+
+### Atmospheric Refraction
+
+1. **Refraction Models**:
+   - **Freespa**: Includes both forward and inverse models:
+     - **Forward Model**: Computes apparent solar position from the 
+     true position.
+     - **Inverse Model**: Computes true position given an apparent 
+     position.
+   - **NREL SPA**: Requires the user to provide a refraction angle at 
+   sunrise/set, which may lead to inconsistencies.
+
+2. **Bennet Refraction Model**:
+   - **Freespa**: Offers two parametrizations:
+     - Original parametrization [Meeus] (same as NREL SPA).
+     - Updated parametrization [Wilsen], with better agreement to "The 
+     Nautical Almanac" (2004 and later editions).
+   - **NREL SPA**: Uses the original Bennet model.
+
+3. **Geometric Dip**:
+   - **Freespa**: Accounts for geometric dip (e.g., the horizon below 
+   the observer) based on elevation or a user-provided value.
+   - **NREL SPA**: Assumes a fixed horizon at 0° elevation.
+
+
+### Solar Event Computation
+
+1. **Supported Events**:
+   - **Freespa**: Computes sunrise, transit, sunset, and various 
+   dawn/dusk times (civil, nautical, and astronomical).
+   - **NREL SPA**: Computes only sunrise, transit, and sunset.
+
+2. **Accuracy**:
+   - **Freespa**: Calculates sunrise/set times with an accuracy of 
+   **0.05° or 1 second**.
+   - **NREL SPA**: May have errors up to **0.1° in solar elevation**.
+
+3. **Special Cases**:
+   - **Freespa**: Handles cases where one or more events (e.g., sunset) 
+   does not occur, such as during polar day/night.
+   - **NREL SPA**: Does not compute events if one is missing.
+
+### Equinox and Solstice
+**Freespa**: provides routines to compute Equinoxes and Solstices.
 
 
 ## References
-[1] J. Meeus, Astronomical Algorithms, second ed. Willmann-Bell, Inc., Richmond, Virginia, USA. (1998): 105-108
+[Meeus] J. Meeus, Astronomical Algorithms, second ed. Willmann-Bell, Inc., Richmond, Virginia, USA. (1998): 105-108
 
-[2] T. Wilson, "Evaluating the Effectiveness of Current Atmospheric Refraction Models in Predicting Sunrise and Sunset Times", Open Access Dissertation, Michigan Technological University, (2018). https://doi.org/10.37099/mtu.dc.etdr/697
+[Wilsen] T. Wilson, "Evaluating the Effectiveness of Current Atmospheric Refraction Models in Predicting Sunrise and Sunset Times", Open Access Dissertation, Michigan Technological University, (2018). https://doi.org/10.37099/mtu.dc.etdr/697
 
-[3] On 64bit windows the gmtime routines do not work for dates before Jan 01 00:00:00 1970, and for dates after Dec 31 23:59:59 3000. As far as I can tell these limits are completely arbitrary. The upper limit is probably not so relevant. However, I find it hard to understand why Microsoft engineers deliberately criple these routines so they cannot handle birthdays before 1970.
+[Morrison] L. V. Morrison, and F. R. Stephenson, "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3), (2004): 327–336. https://doi.org/10.1177/002182860403500305
 
-[4] L. V. Morrison, and F. R. Stephenson, "Historical Values of the Earth’s Clock Error ΔT and the Calculation of Eclipses." Journal for the History of Astronomy, 35(3), (2004): 327–336. https://doi.org/10.1177/002182860403500305
+[NRELSPA] A. Andreas, spa.c source code retrieved from https://midcdmz.nrel.gov/spa/ on the 27th of march 2023
 
-[5] A. Andreas, spa.c source code retrieved from https://midcdmz.nrel.gov/spa/ on the 27th of march 2023
-
-[6] I. Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589
+[Reda] I. Reda and A. Andreas, "Solar position algorithm for solar radiation applications." Solar Energy 76.5 (2004): 577-589

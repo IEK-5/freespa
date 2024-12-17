@@ -1209,6 +1209,114 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 	
 }
 
+/* code to compute equinox and solstice events */
+/* Tables from Meeus, page 178 */
+/* Table 27.A, for the years -1000 to 1000 */
+const double JDME0_EQSO[4][5]={
+	{1721139.29189, 365242.13740, 0.06134, 0.00111, 0.00071}, // SPRINGEQ
+	{1721233.25401, 365241.72562, 0.05323, 0.00907, 0.00025}, // SUMMERSO
+	{1721325.70455, 365242.49558, 0.11677, 0.00297, 0.00074}, // AUTUMNEQ
+	{1721414.39987, 365242.88257, 0.00769, 0.00933, 0.00006}, // WINTERSO
+};
+/* Table 27.B, for the years 1000 to 3000 */
+const double JDME2000_EQSO[4][5]={
+	{2451623.80984, 365242.37404, 0.05169, 0.00411, 0.00057}, // SPRINGEQ
+	{2451716.56767, 365241.62603, 0.00325, 0.00888, 0.00030}, // SUMMERSO
+	{2451810.21715, 365242.01767, 0.11575, 0.00337, 0.00078}, // AUTUMNEQ
+	{2451900.05952, 365242.74049, 0.06223, 0.00823, 0.00032}, // WINTERSO
+};
+
+double Mean_EQSO(struct tm *ut, int E) // polynomial approximation JDE
+{
+	double *table;
+	double y, JDE;
+	// select correct table
+	if (ut->tm_year<-900)
+	{
+		y=((double)ut->tm_year+1900.0)/1000;
+		table=(double *)JDME0_EQSO[E];
+	}
+	else
+	{
+		y=((double)ut->tm_year-100.0)/1000;
+		table=(double *)JDME2000_EQSO[E];
+	}
+	return table[0]+y*(table[1]+y*(table[2]+y*(table[3]+y*table[4])));
+}
+double PertubationTerms_EQSO(double T)
+{
+	// pertubation terms in rad!
+	const double PT[24][3] = {
+		{485,5.6716219372807721e+00,3.3757041381353048e+01},
+		{203,5.8857738365004781e+00,5.7533848531501758e+02},
+		{199,5.9704223052222014e+00,3.5231216280757538e-01},
+		{182,4.8607419668042079e-01,7.7713771552463541e+03},
+		{156,1.2765338149086527e+00,7.8604194554533876e+02},
+		{136,2.9935887330206743e+00,3.9302097277266938e+02},
+		{77,3.8840557173881809e+00,1.1506769706300352e+03},
+		{74,5.1787409565175748e+00,5.2969102188531025e+01},
+		{70,4.2512729920077881e+00,1.5773435804179030e+02},
+		{58,2.0910789768144062e+00,5.8849268282144840e+02},
+		{52,5.1865949381515497e+00,2.6298272103200158e+00},
+		{50,3.6686820876920800e-01,3.9814904682100170e+01},
+		{45,4.3203880303867628e+00,5.2236940057977904e+02},
+		{44,5.6749380628595620e+00,5.5075533081445974e+02},
+		{29,1.0634291132401450e+00,7.7552256689088878e+01},
+		{18,2.7073547356936039e+00,1.1790629008647159e+03},
+		{17,5.0403363468344242e+00,7.9629809364200341e+01},
+		{16,3.4564500506495701e+00,1.0977078858947966e+03},
+		{14,3.4864697137838725e+00,5.4867777813934822e+02},
+		{12,1.6648695734773908e+00,2.5443144545527034e+02},
+		{12,5.0110148154009195e+00,5.5731427814345443e+02},
+		{12,5.5991907733230084e+00,6.0697767436883066e+02},
+		{9,3.9746383055666867e+00,2.1329913134717980e+01},
+		{8,2.6965336943312390e-01,2.9424635013737048e+02},
+	};
+	int i;
+	double s=0;
+	for (i=0;i<24;i++)
+		s+=PT[i][0]*cos(PT[i][1]+T*PT[i][2]);
+	return s;
+}
+
+JulianDay EQSO_i(struct tm *ut, int E, double *delta_t)
+{
+	JulianDay JD={0};
+	double T, W, L,S, JDE, dt;
+	if ((E<0)||(E>3))
+	{
+		JD.E=_FREESPA_GMTIMEF; // is this OK?
+		return JD;
+	}
+	JDE=Mean_EQSO(ut, E);
+	
+	T=(JDE-JD0)/36525;
+	W=6.2830759e+02*T-4.311e-02;
+	L=1+0.0334*cos(W)+0.0007*cos(2*W);
+	S=PertubationTerms_EQSO(T);
+	JDE=JDE+0.00001*S/L;
+	
+	// compute delta t
+	dt=get_delta_t(ut);
+	// populate struct
+	JD.JD=JDE-dt/86400.0; // is this right, the JDE from this algorithm is julian day?
+	JD.JDE=JDE; 
+	JD.JC=(JD.JD-JD0)/36525.0;
+	JD.JCE=(JD.JDE-JD0)/36525.0;
+	JD.JME=JD.JCE/10.0;
+	return JD;
+}
+
+
+struct tm *mkgmEQSOtime(struct tm *ut, int E, double *delta_t)
+{
+	return JDgmtime(EQSO_i(ut, E, delta_t), ut);
+}
+FS_TIME_T mkgmEQSOjtime(struct tm *ut, int E, double *delta_t)
+{
+	return JDmkgmjtime(EQSO_i(ut, E, delta_t));
+}
+
 /* some unit tests */
 // unit test julian date computation with a table of dates
 int testjulian()

@@ -125,6 +125,13 @@ extern int SDMASK;
 #define _FREESPA_EV_OK         0
 #define _FREESPA_EV_SUNABOVE   1
 #define _FREESPA_EV_SUNBELOW  -1
+
+// defines for the spring/autumn equinox and summer/winter solstice
+#define _FREESPA_SPRINGEQ 0  
+#define _FREESPA_SUMMERSO 1
+#define _FREESPA_AUTUMNEQ 2  
+#define _FREESPA_WINTERSO 3
+
 // compute the real solar position
 sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon, 
             double lat, double e);   
@@ -147,11 +154,16 @@ solar_day SolarDay(struct tm *ut, double *delta_t, double delta_ut1,
 // julian unix time routines
 // get delta_t value from internal tables
 double get_delta_t(struct tm *ut);
+
 // populate a time struct with UTC from unix time
 struct tm *gmjtime_r(FS_TIME_T *t, struct tm *ut);
 struct tm *gmjtime(FS_TIME_T *t);
 // create unix time from time struct
 FS_TIME_T mkgmjtime(struct tm *ut);
+
+// compute solstice/equinox times
+struct tm *mkgmEQSOtime(struct tm *ut, int E, double *delta_t);
+FS_TIME_T mkgmEQSOjtime(struct tm *ut, int E, double *delta_t);
 
 // some internal test routines
 int testjulian();

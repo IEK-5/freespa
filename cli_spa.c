@@ -302,7 +302,7 @@ int main(int argc, char **argv)
 	// use default freespa
 	int fspa=1, local=0;	
 	// what to compute/show
-	int tsoltime=0, solpos=1, suntimes=0;	
+	int tsoltime=0, solpos=1, suntimes=0, sunyear=0;	
 	// per default we use the current time
 	FS_TIME_T tc=time(NULL);
 	sol_pos (*aparent)(sol_pos,double*,double, double, double)=&ApSolposBennet;
@@ -335,11 +335,12 @@ int main(int argc, char **argv)
 			{"suntimes",          no_argument, 0, 'r'},
 			{"nrel",              no_argument, 0, 'N'},
 			{"bennet-NA",         no_argument, 0, 'A'},
+			{"sunyear",           no_argument, 0, 'R'},
 			{"help",              no_argument, 0, 'h'},
 			{0, 0, 0, 0}
 		};
 		int option_index = 0;
-		c = getopt_long (argc, argv, "c:e:d:p:T:t:lsSrNAh",long_options, &option_index);
+		c = getopt_long (argc, argv, "c:e:d:p:T:t:lsSrNARh",long_options, &option_index);
 		if (c == -1)
 			break;
 			
@@ -435,6 +436,9 @@ int main(int argc, char **argv)
 				break;
 			case 'A':
 				aparent=&ApSolposBennetNA;
+				break;
+			case 'R':
+				sunyear=(!sunyear);
 				break;
 			case 'h':
 			{
@@ -583,6 +587,38 @@ int main(int argc, char **argv)
 		}	
 
 		printf("---------------------------------------------\n");
+	}	
+	if (sunyear)
+	{
+		struct tm eqso={0};
+		time_t tt;
+		int i;
+		printf("| Equinox / Solstice ------------------------\n");
+		for (i=0;i<4;i++)
+		{
+			eqso=ut;
+			p=mkgmEQSOtime(&eqso, i, NULL);
+			PrintUTC(&eqso, buffer, 80);
+			switch (i)
+			{
+				case 0:
+					printf("Spring Equinox    : %s\n",buffer);
+					break;
+				case 1:
+					printf("Summer Solstice   : %s\n",buffer);
+					break;
+				case 2:
+					printf("Autumn Equinox    : %s\n",buffer);
+					break;
+				case 3:
+					printf("Winter Solstice   : %s\n",buffer);
+					break;
+				default:
+					break;
+			}
+		}
+		printf("---------------------------------------------\n");
+			
 	}	
 #if defined(_WIN32) || defined(_WIN64) 
     SetConsoleOutputCP(CODEPAGE_ORIGINAL);
