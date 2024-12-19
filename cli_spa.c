@@ -596,9 +596,12 @@ int main(int argc, char **argv)
 		printf("| Equinox / Solstice ------------------------\n");
 		for (i=0;i<4;i++)
 		{
-			eqso=ut;
-			p=mkgmEQSOtime(&eqso, i, NULL);
-			PrintUTC(&eqso, buffer, 80);
+			eqso=ut; // make a copy
+			p=mkgmEQSOtime(&eqso, i, NULL); // overwrites eqso
+			if (local)
+				PrintLTZ(&eqso, buffer, 80);
+			else
+				PrintUTC(&eqso, buffer, 80);
 			switch (i)
 			{
 				case 0:

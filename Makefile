@@ -2,10 +2,11 @@ SRC=freespa.c testspa.c
 OBJ=freespa.o
 HDR=freespa.h freespa_tables.h freespa_dt_table.h
 ###### 64 bit linux
-# CC=gcc
-CC=clang
-CFLAGS=-O3 -flto
-# CFLAGS=-Ofast -flto -march=native
+CC=gcc
+# CC=clang
+# CFLAGS=-O3 -flto
+# CFLAGS=-O3 -flto -march=native
+CFLAGS=-Ofast -flto -march=native
 # CFLAGS=-Og -Wall -pedantic -flto -g
 
 ###### 32 bit linux
