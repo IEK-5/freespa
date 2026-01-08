@@ -209,9 +209,6 @@ implementation.
 depend on their respective data types.
 
 
-Here’s an improved and clearer version of your documentation:
-
-
 ## Solar Position Routines
 
 ### Real Solar Position
@@ -448,9 +445,6 @@ The following constants are defined in `freespa.h` to specify the type of Equino
 | `FREESPA_WINTERSO`    | Winter Solstice            |
 
 ---
-Here’s an improved and more organized version of your documentation:
-
----
 
 ## Time Utilities
 
@@ -533,12 +527,8 @@ to compute these values.
 3. **Extended Range Model**:  
    For years beyond the range of the internal tables, Freespa employs 
    the Morrison and Stephenson model [Morrison]:
-
-   $$
-   \Delta t(y) = 32 \left( \frac{y - 1820}{100} \right)^2 - 20
-   $$
-
-   - where $y$ is the Year.
+$$\Delta t(y) = 32 \left( \frac{y - 1820}{100} \right)^2 - 20$$
+   where $y$ is the Year.
 
 ### Querying Δt Values
 
@@ -572,7 +562,7 @@ provides some additional features. Below are the key differences:
 
 - **Freespa**: Provides an interface to determine Δt values from 
 internal tables and models (see [Δt Values](#δt-values)).
-- **NREL SPA**: Limits Δt to \(\pm 8000\) seconds [NRELSPA], even 
+- **NREL SPA**: Limits Δt to $\pm 8000$ seconds [NRELSPA], even 
 though this range only holds for years 245–3400 [Morrison].
 
 
