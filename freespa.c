@@ -427,7 +427,7 @@ void Nutation_lon_obliquity(JulianDay JD, double *del_psi, double *del_eps)
  *  - Geocentric Solar Position GP
  * 
  * output:
- *  - sol_pos struct with the real and aparent solar position
+ *  - sol_pos struct with the real solar position
  */
  
 // some more polynomials
@@ -616,7 +616,7 @@ sol_pos SPA(struct tm *ut, double *delta_t, double delta_ut1, double lon,
  * Pages 105-108
  */
 
-/* base form o Bennet's formula *and* that of its approximate reverse
+/* base form of Bennet's formula *and* that of its approximate reverse
  * i.e. we use the same functional form to compute from the true to 
  * aparent solar position, as we use to compute back.
  */
